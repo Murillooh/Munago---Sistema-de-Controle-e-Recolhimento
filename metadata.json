@@ -1,0 +1,6 @@
+{
+  "name": "Munago - Sistema de Controle e Recolhimento",
+  "description": "Sistema avançado de controle de recolhimento de franquias com painel de indicadores, relatórios, gráficos mensais, filtros personalizados e exportação Excel/PDF.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

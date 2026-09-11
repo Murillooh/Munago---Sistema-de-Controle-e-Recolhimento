@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Troca de tema: desliga o crossfade padrão da View Transition API — quem
+   revela a tela nova é o clip-path animado manualmente em App.tsx. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
