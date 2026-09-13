@@ -117,6 +117,26 @@ export function initDb(): Promise<void> {
         user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
+
+      -- Assinatura de Push Web (Service Worker) por usuário/dispositivo. É o
+      -- que permite mandar notificação de alerta de prazo pro Windows mesmo
+      -- com o sistema fechado.
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        endpoint TEXT UNIQUE NOT NULL,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id);
+
+      -- Evita reenviar o mesmo alerta de prazo a cada checagem periódica.
+      CREATE TABLE IF NOT EXISTS push_alert_log (
+        item_id TEXT NOT NULL,
+        alert_date DATE NOT NULL,
+        PRIMARY KEY (item_id, alert_date)
+      );
     `).then(() => undefined);
   }
   return initPromise;

@@ -3,12 +3,18 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { createApp } from './src/server/app.js';
+import { pool } from './src/server/db.js';
+import { startDeadlineAlertJob } from './src/server/push.js';
 
 // Entrypoint local (npm run dev / node dist/server.cjs). Na Vercel quem serve
 // a API é api/index.ts, que usa o mesmo createApp() sem dar listen aqui.
 async function startServer() {
   const app = await createApp();
   const PORT = 3000;
+
+  // Roda só aqui (processo local de vida longa), não na função serverless da
+  // Vercel — lá cada invocação é curta e um setInterval não sobreviveria.
+  if (pool) startDeadlineAlertJob(pool);
 
   // Vite middleware setup for development
   if (process.env.NODE_ENV !== 'production') {

@@ -143,6 +143,16 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
 
   const [isSyncing, setIsSyncing] = useState(false);
 
+  // Toast leve pra substituir alert() nativo do navegador (feio, não segue o
+  // tema, trava a interação) por um aviso que combina com o resto do sistema.
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = (type: 'success' | 'error', message: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToast({ type, message });
+    toastTimeoutRef.current = setTimeout(() => setToast(null), 4000);
+  };
+
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -442,13 +452,13 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
       const parsed = await parseExcelFile(file);
       if (parsed.length > 0) {
         onImportBulk(parsed);
-        alert(`Sucesso! ${parsed.length} registros importados da planilha.`);
+        showToast('success', `${parsed.length} registro${parsed.length > 1 ? 's' : ''} importado${parsed.length > 1 ? 's' : ''} da planilha.`);
       } else {
-        alert('Nenhum registro válido encontrado na planilha.');
+        showToast('error', 'Nenhum registro válido encontrado na planilha.');
       }
     } catch (err) {
       console.error(err);
-      alert('Erro ao processar o arquivo Excel. Verifique o formato.');
+      showToast('error', 'Erro ao processar o arquivo Excel. Verifique o formato.');
     } finally {
       if (e.target) e.target.value = '';
     }
@@ -1122,6 +1132,36 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
           </div>
         </div>
       )}
+
+      {/* Toast — substitui o alert() nativo do navegador */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] flex items-center space-x-3 px-5 py-3 rounded-2xl shadow-2xl border backdrop-blur-md ${
+              toast.type === 'success'
+                ? 'bg-emerald-600/95 border-emerald-400/30 text-white shadow-emerald-600/30'
+                : 'bg-rose-600/95 border-rose-400/30 text-white shadow-rose-600/30'
+            }`}
+          >
+            {toast.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 shrink-0" />
+            )}
+            <span className="text-xs font-bold">{toast.message}</span>
+            <button
+              onClick={() => setToast(null)}
+              className="text-white/70 hover:text-white transition-colors shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 });

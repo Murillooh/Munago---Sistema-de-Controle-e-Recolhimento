@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { GoogleGenAI } from '@google/genai';
 import { pool, initDb, rowToItem, rowToUser } from './db.js';
+import { configureWebPush, getVapidPublicKey, sendPushToUser } from './push.js';
 
 // Monta o app Express com todas as rotas de API, sem dar listen — usado tanto
 // pelo servidor local (server.ts, que ainda pluga o Vite/estático por cima)
@@ -14,6 +15,7 @@ export async function createApp() {
   app.use(express.json());
 
   await initDb();
+  configureWebPush();
 
   // ---------------------------------------------------------------------
   // Recolhimentos: fonte de verdade no banco (Postgres). Sem DATABASE_URL
@@ -322,6 +324,60 @@ export async function createApp() {
       );
     } catch (err) {
       console.error('Erro ao processar webhook ASAAS:', err);
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // Push Web (Service Worker): alerta de prazo chega no Windows mesmo com o
+  // sistema fechado, desde que o usuário tenha ativado uma vez pelo botão.
+  // ---------------------------------------------------------------------
+  app.get('/api/push/public-key', (req, res) => {
+    res.json({ publicKey: getVapidPublicKey() });
+  });
+
+  app.post('/api/push/subscribe', requireDb, requireAuth, async (req, res) => {
+    try {
+      const { endpoint, keys } = req.body?.subscription || req.body || {};
+      if (!endpoint || !keys?.p256dh || !keys?.auth) {
+        return res.status(400).json({ error: 'Assinatura de push inválida.' });
+      }
+      const ownerId = (req as any).authUser.id;
+      const id = `push-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      await pool!.query(
+        `INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (endpoint) DO UPDATE SET user_id = EXCLUDED.user_id, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth`,
+        [id, ownerId, endpoint, keys.p256dh, keys.auth]
+      );
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao salvar assinatura de push.', details: err.message });
+    }
+  });
+
+  app.post('/api/push/unsubscribe', requireDb, requireAuth, async (req, res) => {
+    try {
+      const { endpoint } = req.body || {};
+      if (endpoint) await pool!.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [endpoint]);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao remover assinatura de push.', details: err.message });
+    }
+  });
+
+  // Dispara uma notificação de confirmação assim que o usuário ativa — prova
+  // na hora que a assinatura funciona, sem esperar o próximo prazo vencer.
+  app.post('/api/push/test', requireDb, requireAuth, async (req, res) => {
+    try {
+      const ownerId = (req as any).authUser.id;
+      await sendPushToUser(pool!, ownerId, {
+        title: 'Munago — Alertas ativados',
+        body: 'Você vai receber alertas de prazo por aqui, mesmo com o sistema fechado.',
+        tag: 'munago-teste-push',
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao enviar notificação de teste.', details: err.message });
     }
   });
 

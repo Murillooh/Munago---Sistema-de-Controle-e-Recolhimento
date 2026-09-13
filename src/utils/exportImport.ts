@@ -182,24 +182,28 @@ export function parseExcelFile(file: File): Promise<RecolhimentoItem[]> {
           return String(val);
         };
 
+        // Ordem fixa das colunas na planilha de origem (sem coluna de índice "#"
+        // na frente): A=Franquia, B=CNPJ, C=C.Custo, D=Data Criação, E=Vencimento,
+        // F=Vencimento Original, G=Data Pagamento, H=Valor, I=Status,
+        // J=Competência Recolhimento, K=Competência Pagamento, L=Descrição.
         for (let i = 1; i < json.length; i++) {
           const r = json[i] as any[];
-          if (!r || r.length === 0 || !r[1]) continue;
+          if (!r || r.length === 0 || !r[0]) continue;
 
           rows.push({
             id: `imported-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
-            franquia: String(r[1] || 'FRANQUIA DESCONHECIDA'),
-            cnpj: String(r[2] || ''),
-            cCusto: String(r[3] || 'CANINDÉ'),
-            dataCriacao: formatExcelDate(r[4]),
-            vencimento: formatExcelDate(r[5]),
-            vencimentoOriginal: formatExcelDate(r[6]),
-            dataPagamento: formatExcelDate(r[7]),
-            valor: Number(r[8] || 0) || 0,
-            status: (['Confirmada', 'Recebida', 'Aguardando pagamento', 'Atrasado'].includes(r[9]) ? r[9] : 'Aguardando pagamento') as any,
-            competenciaRecolhimento: String(r[10] || 'atual'),
-            competenciaPagamento: String(r[11] || ''),
-            descricao: String(r[12] || ''),
+            franquia: String(r[0] || 'FRANQUIA DESCONHECIDA'),
+            cnpj: String(r[1] || ''),
+            cCusto: String(r[2] || 'CANINDÉ'),
+            dataCriacao: formatExcelDate(r[3]),
+            vencimento: formatExcelDate(r[4]),
+            vencimentoOriginal: formatExcelDate(r[5]),
+            dataPagamento: formatExcelDate(r[6]),
+            valor: Number(r[7] || 0) || 0,
+            status: (['Confirmada', 'Recebida', 'Aguardando pagamento', 'Atrasado'].includes(r[8]) ? r[8] : 'Aguardando pagamento') as any,
+            competenciaRecolhimento: String(r[9] || 'atual'),
+            competenciaPagamento: String(r[10] || ''),
+            descricao: String(r[11] || ''),
           });
         }
 
