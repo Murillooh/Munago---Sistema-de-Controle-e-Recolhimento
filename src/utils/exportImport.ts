@@ -182,28 +182,78 @@ export function parseExcelFile(file: File): Promise<RecolhimentoItem[]> {
           return String(val);
         };
 
-        // Ordem fixa das colunas na planilha de origem (sem coluna de índice "#"
-        // na frente): A=Franquia, B=CNPJ, C=C.Custo, D=Data Criação, E=Vencimento,
-        // F=Vencimento Original, G=Data Pagamento, H=Valor, I=Status,
-        // J=Competência Recolhimento, K=Competência Pagamento, L=Descrição.
+        // Descobre a coluna de cada campo pelo TEXTO do cabeçalho (linha 1), em
+        // vez de uma posição fixa — assim funciona tanto com uma planilha externa
+        // (Franquia já é a coluna A) quanto com o arquivo que o próprio sistema
+        // exporta (tem "#" e "CATEGORIA" extras), não importa a ordem das colunas.
+        const normalizeHeader = (v: any) =>
+          String(v ?? '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '') // remove acentos
+            .trim()
+            .toUpperCase();
+
+        const HEADER_ALIASES: Record<string, keyof RecolhimentoItem> = {
+          'FRANQUIA': 'franquia',
+          'CNPJ': 'cnpj',
+          'C CUSTO': 'cCusto',
+          'C. CUSTO': 'cCusto',
+          'CCUSTO': 'cCusto',
+          'CATEGORIA': 'categoria',
+          'DATA DA CRIACAO': 'dataCriacao',
+          'DATA CRIACAO': 'dataCriacao',
+          'CRIACAO': 'dataCriacao',
+          'VENCIMENTO': 'vencimento',
+          'VENCIMENTO ORIGINAL': 'vencimentoOriginal',
+          'DATA DO PAGAMENTO': 'dataPagamento',
+          'DATA PAGAMENTO': 'dataPagamento',
+          'PAGO EM': 'dataPagamento',
+          'VALOR DO RECOLHIMENTO': 'valor',
+          'VALOR': 'valor',
+          'STATUS': 'status',
+          'COMPETENCIA DO RECOLHIMENTO': 'competenciaRecolhimento',
+          'COMPETENCIA RECOLHIMENTO': 'competenciaRecolhimento',
+          'COMP. REC.': 'competenciaRecolhimento',
+          'COMPETENCIA PAGAMENTO': 'competenciaPagamento',
+          'COMP. PAG.': 'competenciaPagamento',
+          'DESCRICAO': 'descricao',
+        };
+
+        const headerRow = (json[0] as any[]) || [];
+        const colIndex: Partial<Record<keyof RecolhimentoItem, number>> = {};
+        headerRow.forEach((cell, idx) => {
+          const field = HEADER_ALIASES[normalizeHeader(cell)];
+          if (field && colIndex[field] === undefined) colIndex[field] = idx;
+        });
+
+        // Sem "FRANQUIA" reconhecível no cabeçalho, assume o layout padrão sem
+        // coluna de índice na frente (A=Franquia, B=CNPJ, ...) como antes.
+        const hasHeaders = colIndex.franquia !== undefined;
+        const at = (field: keyof RecolhimentoItem, fallbackIdx: number, r: any[]) =>
+          r[hasHeaders ? colIndex[field] ?? -1 : fallbackIdx];
+
         for (let i = 1; i < json.length; i++) {
           const r = json[i] as any[];
-          if (!r || r.length === 0 || !r[0]) continue;
+          const franquiaCell = at('franquia', 0, r);
+          if (!r || r.length === 0 || !franquiaCell) continue;
 
           rows.push({
             id: `imported-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
-            franquia: String(r[0] || 'FRANQUIA DESCONHECIDA'),
-            cnpj: String(r[1] || ''),
-            cCusto: String(r[2] || 'CANINDÉ'),
-            dataCriacao: formatExcelDate(r[3]),
-            vencimento: formatExcelDate(r[4]),
-            vencimentoOriginal: formatExcelDate(r[5]),
-            dataPagamento: formatExcelDate(r[6]),
-            valor: Number(r[7] || 0) || 0,
-            status: (['Confirmada', 'Recebida', 'Aguardando pagamento', 'Atrasado'].includes(r[8]) ? r[8] : 'Aguardando pagamento') as any,
-            competenciaRecolhimento: String(r[9] || 'atual'),
-            competenciaPagamento: String(r[10] || ''),
-            descricao: String(r[11] || ''),
+            franquia: String(franquiaCell || 'FRANQUIA DESCONHECIDA'),
+            cnpj: String(at('cnpj', 1, r) || ''),
+            cCusto: String(at('cCusto', 2, r) || 'CANINDÉ'),
+            categoria: at('categoria', -1, r) ? String(at('categoria', -1, r)) : undefined,
+            dataCriacao: formatExcelDate(at('dataCriacao', 3, r)),
+            vencimento: formatExcelDate(at('vencimento', 4, r)),
+            vencimentoOriginal: formatExcelDate(at('vencimentoOriginal', 5, r)),
+            dataPagamento: formatExcelDate(at('dataPagamento', 6, r)),
+            valor: Number(at('valor', 7, r) || 0) || 0,
+            status: (['Confirmada', 'Recebida', 'Aguardando pagamento', 'Atrasado'].includes(at('status', 8, r))
+              ? at('status', 8, r)
+              : 'Aguardando pagamento') as any,
+            competenciaRecolhimento: String(at('competenciaRecolhimento', 9, r) || 'atual'),
+            competenciaPagamento: String(at('competenciaPagamento', 10, r) || ''),
+            descricao: String(at('descricao', 11, r) || ''),
           });
         }
 
