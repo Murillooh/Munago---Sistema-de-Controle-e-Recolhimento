@@ -920,14 +920,14 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
       {/* Add / Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-              <h3 className="text-base font-bold text-slate-900">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-4xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
                 {editingItem ? 'Editar Registro de Recolhimento' : 'Novo Registro de Recolhimento'}
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -936,24 +936,24 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
             <form onSubmit={handleSave} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Franquia (Unidade) *</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Franquia (Unidade) *</label>
                   <select
                     required
                     value={formData.franquia || ''}
                     onChange={(e) => {
                       const selected = unidades.find(u => u.nome === e.target.value);
                       if (selected) {
-                        setFormData({ 
-                          ...formData, 
-                          franquia: selected.nome, 
-                          cnpj: selected.cnpj, 
-                          cCusto: selected.cCustoPadrao || formData.cCusto 
+                        setFormData({
+                          ...formData,
+                          franquia: selected.nome,
+                          cnpj: selected.cnpj,
+                          cCusto: selected.cCustoPadrao || formData.cCusto
                         });
                       } else {
                         setFormData({ ...formData, franquia: e.target.value });
                       }
                     }}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500/20"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-blue-500/20"
                   >
                     <option value="">Selecione uma unidade...</option>
                     {unidades.map(u => (
@@ -964,33 +964,33 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">CNPJ</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">CNPJ</label>
                   <input
                     type="text"
                     value={formData.cnpj || ''}
                     onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })}
                     placeholder="Ex: 64058389000109"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500/20 font-mono"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-blue-500/20 font-mono"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Centro de Custo</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Centro de Custo</label>
                   <input
                     type="text"
                     value={formData.cCusto || ''}
                     onChange={(e) => setFormData({ ...formData, cCusto: e.target.value })}
                     placeholder="Ex: CANINDÉ"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500/20"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-blue-500/20"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Categoria</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Categoria</label>
                   <select
                     value={formData.categoria || ''}
                     onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-bold focus:ring-2 focus:ring-blue-500/20 outline-none"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 font-bold focus:ring-2 focus:ring-blue-500/20 outline-none"
                   >
                     <option value="">Selecione...</option>
                     {baseCategories.map(cat => (
@@ -1000,67 +1000,67 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Valor do Recolhimento (R$) *</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Valor do Recolhimento (R$) *</label>
                   <input
                     type="number"
                     step="0.01"
                     required
                     value={formData.valor || 0}
                     onChange={(e) => setFormData({ ...formData, valor: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-bold focus:ring-2 focus:ring-blue-500/20"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 font-bold focus:ring-2 focus:ring-blue-500/20"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Data da Criação</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Data da Criação</label>
                   <input
                     type="text"
                     value={formData.dataCriacao || ''}
                     onChange={(e) => setFormData({ ...formData, dataCriacao: e.target.value })}
                     placeholder="DD/MM/AAAA"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Vencimento</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Vencimento</label>
                   <input
                     type="text"
                     value={formData.vencimento || ''}
                     onChange={(e) => setFormData({ ...formData, vencimento: e.target.value })}
                     placeholder="DD/MM/AAAA"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Vencimento Original</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Vencimento Original</label>
                   <input
                     type="text"
                     value={formData.vencimentoOriginal || ''}
                     onChange={(e) => setFormData({ ...formData, vencimentoOriginal: e.target.value })}
                     placeholder="DD/MM/AAAA"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Data do Pagamento</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Data do Pagamento</label>
                   <input
                     type="text"
                     value={formData.dataPagamento || ''}
                     onChange={(e) => setFormData({ ...formData, dataPagamento: e.target.value })}
                     placeholder="DD/MM/AAAA (vazio se pendente)"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Status</label>
                   <select
                     value={formData.status || 'Aguardando pagamento'}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200"
                   >
                     <option value="Recebida">Recebida</option>
                     <option value="Confirmada">Confirmada</option>
@@ -1069,44 +1069,44 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Competência Recolhimento</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Competência Recolhimento</label>
                   <input
                     type="text"
                     value={formData.competenciaRecolhimento || ''}
                     onChange={(e) => setFormData({ ...formData, competenciaRecolhimento: e.target.value })}
                     placeholder="Ex: ago/26"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 uppercase"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 uppercase"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Competência Pagamento</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Competência Pagamento</label>
                   <input
                     type="text"
                     value={formData.competenciaPagamento || ''}
                     onChange={(e) => setFormData({ ...formData, competenciaPagamento: e.target.value })}
                     placeholder="Ex: set/26"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 uppercase"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 uppercase"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Descrição</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Descrição</label>
                 <textarea
                   rows={2}
                   value={formData.descricao || ''}
                   onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
                   placeholder="Descrição detalhada do recolhimento..."
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200"
                 />
               </div>
 
-              <div className="flex justify-end space-x-3 pt-4 border-t border-slate-200">
+              <div className="flex justify-end space-x-3 pt-4 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-colors"
                 >
                   Cancelar
                 </button>

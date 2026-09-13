@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { RecolhimentoItem, GoalSettings } from '../types';
-import { Bell, Clock, AlertTriangle, CheckCircle2, ShieldAlert, BellRing } from 'lucide-react';
+import { Bell, Clock, AlertTriangle, CheckCircle2, ShieldAlert, BellRing, Info, XCircle } from 'lucide-react';
 
 interface NotificationsViewProps {
   items: RecolhimentoItem[];
@@ -45,14 +45,22 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ items, goa
   const goalPercentage = Math.min(Math.round((confirmedValue / goalSettings.monthlyGoal) * 100), 100);
   const goalReached = confirmedValue >= goalSettings.monthlyGoal;
 
+  // Feedback dentro do próprio app — o popup nativo do navegador pode ser
+  // silenciosamente engolido pelo sistema operacional (Foco Assistido do
+  // Windows, notificações do Chrome desligadas no SO, etc.) sem lançar erro
+  // nenhum. Sem isso, clicar no botão nesse cenário parece "não fazer nada".
+  const [pushStatus, setPushStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   const testBrowserNotification = () => {
+    setPushStatus(null);
+
     if (!('Notification' in window)) {
-      alert('Seu navegador não suporta notificações.');
+      setPushStatus({ type: 'error', message: 'Seu navegador não suporta notificações.' });
       return;
     }
 
     if (!window.isSecureContext) {
-      alert('Notificações exigem HTTPS ou localhost. Este endereço não é um contexto seguro.');
+      setPushStatus({ type: 'error', message: 'Notificações exigem HTTPS ou localhost. Este endereço não é um contexto seguro.' });
       return;
     }
 
@@ -63,25 +71,37 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ items, goa
           icon: '/logo.png',
           tag: 'munago-teste',
         });
-        n.onerror = (e) => console.error('Notification error:', e);
+        n.onerror = (e) => {
+          console.error('Notification error:', e);
+          setPushStatus({ type: 'error', message: 'O navegador rejeitou a notificação. Veja o console para detalhes.' });
+        };
+        n.onshow = () => setPushStatus({ type: 'success', message: 'Notificação enviada com sucesso!' });
+        // Se "onshow" não disparar em ~1.5s, o navegador aceitou o pedido mas o SO
+        // pode ter engolido a exibição — isso é o mais comum no Windows.
+        setPushStatus({
+          type: 'success',
+          message:
+            'Comando de notificação enviado. Não apareceu nada na tela? No Windows, confira Configurações > Sistema > Notificações (o Chrome/Edge precisa estar liberado lá) e se o Foco Assistido não está ativo.',
+        });
       } catch (err) {
         console.error('Falha ao criar notificação:', err);
-        alert('Falha ao exibir notificação. Veja o console para detalhes.');
+        setPushStatus({ type: 'error', message: 'Falha ao exibir notificação. Veja o console para detalhes.' });
       }
     };
 
     if (Notification.permission === 'granted') {
       fire();
     } else if (Notification.permission === 'denied') {
-      alert(
-        'Permissão de notificação bloqueada para este site. Libere em: clique no cadeado ao lado do endereço > Notificações > Permitir. Também confira em chrome://settings/content/notifications.'
-      );
+      setPushStatus({
+        type: 'error',
+        message: 'Permissão de notificação bloqueada para este site. Libere clicando no cadeado ao lado do endereço > Notificações > Permitir.',
+      });
     } else {
       Notification.requestPermission().then((permission) => {
         if (permission === 'granted') {
           fire();
         } else {
-          alert('A permissão para notificações foi negada ou fechada.');
+          setPushStatus({ type: 'error', message: 'A permissão para notificações foi negada ou fechada.' });
         }
       });
     }
@@ -114,6 +134,32 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ items, goa
           </button>
         </div>
       </div>
+
+      {pushStatus && (
+        <div
+          className={`p-3.5 rounded-xl border flex items-start justify-between gap-3 text-xs font-semibold ${
+            pushStatus.type === 'success'
+              ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300'
+              : 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800/50 text-rose-700 dark:text-rose-300'
+          }`}
+        >
+          <div className="flex items-start space-x-2">
+            {pushStatus.type === 'success' ? (
+              <Info className="w-4 h-4 shrink-0 mt-0.5" />
+            ) : (
+              <XCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            )}
+            <span>{pushStatus.message}</span>
+          </div>
+          <button
+            onClick={() => setPushStatus(null)}
+            className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+            title="Fechar"
+          >
+            <XCircle className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

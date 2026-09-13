@@ -166,7 +166,7 @@ export default function App() {
   // cores, tudo) crescendo a partir do botão clicado. Ou seja: os itens em si
   // vão "preenchendo" com a cor nova conforme o círculo passa, não uma camada
   // por cima deles. Sem suporte no navegador, cai pra troca instantânea.
-  const THEME_ANIM_DURATION = 900; // ms
+  const THEME_ANIM_DURATION = 1600; // ms
   const [themeAnim, setThemeAnim] = useState<{ x: number; y: number; radius: number; toDark: boolean; key: number } | null>(null);
 
   useEffect(() => {
