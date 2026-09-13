@@ -3,7 +3,7 @@ import express from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { GoogleGenAI } from '@google/genai';
-import { pool, initDb, rowToItem, rowToUser } from './db';
+import { pool, initDb, rowToItem, rowToUser } from './db.js';
 
 // Monta o app Express com todas as rotas de API, sem dar listen — usado tanto
 // pelo servidor local (server.ts, que ainda pluga o Vite/estático por cima)

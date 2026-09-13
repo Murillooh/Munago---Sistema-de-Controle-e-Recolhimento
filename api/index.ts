@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { createApp } from '../src/server/app';
+import { createApp } from '../src/server/app.js';
 
 // Função serverless única que recebe TODO /api/* (ver rewrite em vercel.json).
 // O app Express é montado uma vez e reaproveitado entre chamadas na mesma

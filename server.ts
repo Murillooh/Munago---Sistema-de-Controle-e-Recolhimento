@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { createApp } from './src/server/app';
+import { createApp } from './src/server/app.js';
 
 // Entrypoint local (npm run dev / node dist/server.cjs). Na Vercel quem serve
 // a API é api/index.ts, que usa o mesmo createApp() sem dar listen aqui.
