@@ -159,27 +159,40 @@ export function parseExcelFile(file: File): Promise<RecolhimentoItem[]> {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const json = XLSX.utils.sheet_to_json<any>(worksheet, { header: 1 });
 
         const rows: RecolhimentoItem[] = [];
-        
+
+        // Serial do Excel (dias desde 30/12/1899) -> Date. `cellDates: true` já
+        // resolve a maioria das células de data de verdade, isso aqui é só
+        // reforço pra número cru que ainda apareça como serial.
+        const excelSerialToDate = (serial: number): Date =>
+          new Date(Math.round((serial - 25569) * 86400 * 1000));
+
         // Helper to format date correctly regardless of input type
         const formatExcelDate = (val: any): string => {
           if (!val) return '';
           if (val instanceof Date) {
             return val.toLocaleDateString('pt-BR');
           }
-          // Handle Excel serial numbers
           if (typeof val === 'number') {
-            const date = XLSX.utils.format_cell({ v: val, t: 'd' });
-            if (date) {
-              const d = new Date(date);
-              return isNaN(d.getTime()) ? String(val) : d.toLocaleDateString('pt-BR');
-            }
+            const d = excelSerialToDate(val);
+            return isNaN(d.getTime()) ? String(val) : d.toLocaleDateString('pt-BR');
           }
           return String(val);
+        };
+
+        // Competência é mês/ano (ex: "ago/26"), não dia/mês/ano — mas na
+        // planilha real essas colunas vêm como uma data (1º dia do mês).
+        const MONTHS_PT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+        const formatCompetencia = (val: any): string => {
+          if (!val) return '';
+          let d: Date | null = null;
+          if (val instanceof Date) d = val;
+          else if (typeof val === 'number') d = excelSerialToDate(val);
+          if (d && !isNaN(d.getTime())) {
+            return `${MONTHS_PT[d.getMonth()]}/${String(d.getFullYear()).slice(-2)}`;
+          }
+          return String(val).toLowerCase();
         };
 
         // Descobre a coluna de cada campo pelo TEXTO do cabeçalho (linha 1), em
@@ -219,15 +232,34 @@ export function parseExcelFile(file: File): Promise<RecolhimentoItem[]> {
           'DESCRICAO': 'descricao',
         };
 
-        const headerRow = (json[0] as any[]) || [];
-        const colIndex: Partial<Record<keyof RecolhimentoItem, number>> = {};
-        headerRow.forEach((cell, idx) => {
-          const field = HEADER_ALIASES[normalizeHeader(cell)];
-          if (field && colIndex[field] === undefined) colIndex[field] = idx;
-        });
+        const buildColIndex = (headerRow: any[]) => {
+          const idx: Partial<Record<keyof RecolhimentoItem, number>> = {};
+          headerRow.forEach((cell, i) => {
+            const field = HEADER_ALIASES[normalizeHeader(cell)];
+            if (field && idx[field] === undefined) idx[field] = i;
+          });
+          return idx;
+        };
 
-        // Sem "FRANQUIA" reconhecível no cabeçalho, assume o layout padrão sem
-        // coluna de índice na frente (A=Franquia, B=CNPJ, ...) como antes.
+        // Um arquivo pode ter mais de uma aba (ex: um resumo mensal em pivô
+        // antes da aba com os lançamentos de verdade) — usa a PRIMEIRA aba cujo
+        // cabeçalho tem "FRANQUIA" reconhecível, não simplesmente a primeira
+        // aba do arquivo, que é o que causava a importação de dados errados.
+        let json: any[] = [];
+        let colIndex: Partial<Record<keyof RecolhimentoItem, number>> = {};
+        for (const sheetName of workbook.SheetNames) {
+          const candidateJson = XLSX.utils.sheet_to_json<any>(workbook.Sheets[sheetName], { header: 1 });
+          const candidateColIndex = buildColIndex((candidateJson[0] as any[]) || []);
+          if (candidateColIndex.franquia !== undefined) {
+            json = candidateJson;
+            colIndex = candidateColIndex;
+            break;
+          }
+          if (json.length === 0) json = candidateJson; // fallback: primeira aba, caso nenhuma tenha cabeçalho reconhecível
+        }
+
+        // Sem "FRANQUIA" reconhecível em nenhuma aba, assume o layout padrão
+        // sem coluna de índice na frente (A=Franquia, B=CNPJ, ...) como antes.
         const hasHeaders = colIndex.franquia !== undefined;
         const at = (field: keyof RecolhimentoItem, fallbackIdx: number, r: any[]) =>
           r[hasHeaders ? colIndex[field] ?? -1 : fallbackIdx];
@@ -251,8 +283,8 @@ export function parseExcelFile(file: File): Promise<RecolhimentoItem[]> {
             status: (['Confirmada', 'Recebida', 'Aguardando pagamento', 'Atrasado'].includes(at('status', 8, r))
               ? at('status', 8, r)
               : 'Aguardando pagamento') as any,
-            competenciaRecolhimento: String(at('competenciaRecolhimento', 9, r) || 'atual'),
-            competenciaPagamento: String(at('competenciaPagamento', 10, r) || ''),
+            competenciaRecolhimento: formatCompetencia(at('competenciaRecolhimento', 9, r)) || 'atual',
+            competenciaPagamento: formatCompetencia(at('competenciaPagamento', 10, r)),
             descricao: String(at('descricao', 11, r) || ''),
           });
         }

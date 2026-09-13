@@ -6,3 +6,8 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Planilhas reais (dados financeiros de clientes) — nunca versionar, repo é público.
+*.xlsx
+*.xls
+!public/**/*.xlsx
