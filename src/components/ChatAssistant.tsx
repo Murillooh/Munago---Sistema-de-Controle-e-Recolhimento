@@ -14,6 +14,46 @@ interface ChatAssistantProps {
   goalSettings: GoalSettings;
 }
 
+// Manda um resumo em vez da lista inteira de lançamentos. Com a planilha
+// carregada (centenas de linhas), o dump bruto vira uma requisição de
+// dezenas de segundos pro Gemini — na Vercel (timeout de 10s no plano
+// Hobby) isso simplesmente nunca responde e o chat parece quebrado.
+function buildContextSummary(items: RecolhimentoItem[], goalSettings: GoalSettings) {
+  const byStatus: Record<string, { count: number; total: number }> = {};
+  for (const item of items) {
+    const bucket = byStatus[item.status] || { count: 0, total: 0 };
+    bucket.count += 1;
+    bucket.total += item.valor || 0;
+    byStatus[item.status] = bucket;
+  }
+
+  const parseVencimento = (v: string) => {
+    const [d, m, y] = (v || '').split('/').map(Number);
+    return d && m && y ? new Date(y, m - 1, d) : null;
+  };
+
+  const overdue = items
+    .filter((i) => i.status === 'Atrasado')
+    .sort((a, b) => (parseVencimento(a.vencimento)?.getTime() || 0) - (parseVencimento(b.vencimento)?.getTime() || 0))
+    .slice(0, 8)
+    .map((i) => ({ franquia: i.franquia, valor: i.valor, vencimento: i.vencimento }));
+
+  const maioresPendentes = items
+    .filter((i) => i.status === 'Aguardando pagamento')
+    .sort((a, b) => (b.valor || 0) - (a.valor || 0))
+    .slice(0, 8)
+    .map((i) => ({ franquia: i.franquia, valor: i.valor, vencimento: i.vencimento }));
+
+  return {
+    totalRegistros: items.length,
+    totalGeral: items.reduce((s, i) => s + (i.valor || 0), 0),
+    porStatus: byStatus,
+    exemplosAtrasados: overdue,
+    maioresPendentes,
+    metas: goalSettings,
+  };
+}
+
 export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSettings }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -43,7 +83,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
         body: JSON.stringify({
           prompt: input,
           history: messages,
-          context: { items, goalSettings }
+          context: buildContextSummary(items, goalSettings)
         }),
       });
 
