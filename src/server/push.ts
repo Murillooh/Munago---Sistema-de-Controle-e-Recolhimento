@@ -19,7 +19,7 @@ export function configureWebPush() {
       `[push] VAPID_PRIVATE_KEY="${generated.privateKey}"`
     );
     webpush.setVapidDetails(
-      process.env.VAPID_SUBJECT || 'mailto:contato@locgrupo.com.br',
+      process.env.VAPID_SUBJECT || 'mailto:muurisattos@gmail.com',
       generated.publicKey,
       generated.privateKey
     );
@@ -28,7 +28,7 @@ export function configureWebPush() {
 
   vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
   webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || 'mailto:contato@locgrupo.com.br',
+    process.env.VAPID_SUBJECT || 'mailto:muurisattos@gmail.com',
     process.env.VAPID_PUBLIC_KEY,
     process.env.VAPID_PRIVATE_KEY
   );
