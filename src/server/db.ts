@@ -10,6 +10,14 @@ export const pool = process.env.DATABASE_URL
     })
   : null;
 
+// Sem isso, um erro numa conexão ociosa do pool (queda de rede, RDS
+// derrubando conexão parada, etc.) vira uma exceção não tratada e derruba
+// o processo Node inteiro — é um gotcha bem conhecido da lib `pg`.
+// Com o listener, o pool descarta a conexão ruim e segue funcionando.
+pool?.on('error', (err) => {
+  console.error('[db] Erro inesperado numa conexão ociosa do pool:', err.message);
+});
+
 export interface RecolhimentoRow {
   id: string;
   franquia: string;
