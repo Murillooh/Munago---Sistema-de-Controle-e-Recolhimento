@@ -442,7 +442,9 @@ export async function createApp() {
   const anthropic = process.env.ANTHROPIC_API_KEY
     ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     : null;
-  const CLAUDE_MODEL = 'claude-opus-5';
+  // Haiku em vez de Opus: 5x mais barato ($1/$5 por milhão de tokens vs
+  // $5/$25), de sobra pra volume baixo de consultas do chat e dos insights.
+  const CLAUDE_MODEL = 'claude-haiku-4-5';
   const isOverloadedError = (err: any) =>
     err instanceof Anthropic.RateLimitError || (err instanceof Anthropic.APIError && err.status === 529);
   const isCreditBalanceError = (err: any) =>
