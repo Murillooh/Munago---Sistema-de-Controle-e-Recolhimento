@@ -443,6 +443,10 @@ export async function createApp() {
     ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     : null;
   const CLAUDE_MODEL = 'claude-opus-5';
+  const isOverloadedError = (err: any) =>
+    err instanceof Anthropic.RateLimitError || (err instanceof Anthropic.APIError && err.status === 529);
+  const isCreditBalanceError = (err: any) =>
+    err instanceof Anthropic.BadRequestError && Boolean(err.message?.includes('credit balance'));
 
   // API Health check
   app.get('/api/health', (req, res) => {
@@ -478,10 +482,16 @@ export async function createApp() {
       return res.json({ insights: text, recommendations: [] });
     } catch (err: any) {
       console.error('AI Insights Error:', err);
-      if (err instanceof Anthropic.RateLimitError || (err instanceof Anthropic.APIError && err.status === 529)) {
+      if (isOverloadedError(err)) {
         return res.json({
           insights: "A Inteligência Munago está operando em capacidade reduzida no momento. Tente de novo em 1 ou 2 minutos.",
           recommendations: ["Tentar novamente em instantes", "Acompanhar meta mensal"]
+        });
+      }
+      if (isCreditBalanceError(err)) {
+        return res.json({
+          insights: "A Inteligência Munago está sem crédito disponível na conta Anthropic no momento.",
+          recommendations: ["Adicionar créditos em console.anthropic.com/settings/billing"]
         });
       }
       return res.status(500).json({ error: 'Erro crítico ao gerar insights inteligentes.' });
@@ -532,9 +542,14 @@ export async function createApp() {
       return res.json({ text });
     } catch (err: any) {
       console.error('Chat API Error:', err);
-      if (err instanceof Anthropic.RateLimitError || (err instanceof Anthropic.APIError && err.status === 529)) {
+      if (isOverloadedError(err)) {
         return res.json({
           text: 'A Inteligência Munago está operando em capacidade reduzida no momento. Tente de novo em 1 ou 2 minutos.',
+        });
+      }
+      if (isCreditBalanceError(err)) {
+        return res.json({
+          text: 'Sem crédito disponível na conta Anthropic no momento — dá uma olhada em console.anthropic.com/settings/billing.',
         });
       }
       res.status(500).json({ error: 'Erro ao processar mensagem no chat.' });
