@@ -16,6 +16,7 @@ import { PreloadView } from './components/PreloadView';
 import { GuidedTour } from './components/GuidedTour';
 import { BrowserNotifications } from './components/BrowserNotifications';
 import { ChatAssistant } from './components/ChatAssistant';
+import { ConfirmDialog } from './components/ConfirmDialog';
 import { motion } from 'motion/react';
 import { Menu, Bell, Download, FileText, Plus, Sun, Moon, HelpCircle, Database, FileBarChart, Search } from 'lucide-react';
 import { exportToExcel, exportToPDF } from './utils/exportImport';
@@ -308,11 +309,16 @@ export default function App() {
     }).catch(() => {});
   };
 
+  // Modal de confirmação genérico (substitui confirm() nativo) — quem quiser
+  // confirmar algo só passa a mensagem e o que fazer se o usuário confirmar.
+  const [confirmState, setConfirmState] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const askConfirm = (message: string, onConfirm: () => void) => setConfirmState({ message, onConfirm });
+
   const handleDeleteItem = (id: string) => {
-    if (confirm('Tem certeza que deseja excluir este registro?')) {
+    askConfirm('Tem certeza que deseja excluir este registro? Essa ação não pode ser desfeita.', () => {
       setItems((prev) => prev.filter((item) => item.id !== id));
       fetch(`/api/items/${id}`, { method: 'DELETE', headers: itemsAuthHeaders() }).catch(() => {});
-    }
+    });
   };
 
   const handleImportBulk = (newItems: RecolhimentoItem[]) => {
@@ -496,10 +502,10 @@ export default function App() {
                 categorias={baseCategories}
                 onAddUnidade={(u) => setUnidades(prev => [...prev, u])}
                 onUpdateUnidade={(u) => setUnidades(prev => prev.map(item => item.id === u.id ? u : item))}
-                onDeleteUnidade={(id) => confirm('Excluir unidade?') && setUnidades(prev => prev.filter(item => item.id !== id))}
+                onDeleteUnidade={(id) => askConfirm('Excluir esta unidade? Essa ação não pode ser desfeita.', () => setUnidades(prev => prev.filter(item => item.id !== id)))}
                 onAddCategoria={(c) => setBaseCategories(prev => [...prev, c])}
                 onUpdateCategoria={(c) => setBaseCategories(prev => prev.map(item => item.id === c.id ? c : item))}
-                onDeleteCategoria={(id) => confirm('Excluir categoria?') && setBaseCategories(prev => prev.filter(item => item.id !== id))}
+                onDeleteCategoria={(id) => askConfirm('Excluir esta categoria? Essa ação não pode ser desfeita.', () => setBaseCategories(prev => prev.filter(item => item.id !== id)))}
               />
             )}
             {activeTab === 'relatorios' && (
@@ -525,6 +531,15 @@ export default function App() {
         </main>
       </div>
       <ChatAssistant items={items} goalSettings={goalSettings} />
+      <ConfirmDialog
+        open={!!confirmState}
+        message={confirmState?.message ?? ''}
+        onConfirm={() => {
+          confirmState?.onConfirm();
+          setConfirmState(null);
+        }}
+        onCancel={() => setConfirmState(null)}
+      />
     </div>
   );
 }

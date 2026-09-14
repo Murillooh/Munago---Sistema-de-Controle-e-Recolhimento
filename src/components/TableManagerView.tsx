@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DynamicTable } from './DynamicTable';
+import { ConfirmDialog } from './ConfirmDialog';
 import { exportToExcel, exportToPDF, parseExcelFile } from '../utils/exportImport';
 import { Unidade, BaseCategory } from '../types';
 import {
@@ -142,6 +143,10 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
   ]);
 
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Confirmação de exclusão em massa — substitui confirm() nativo, mesmo
+  // modal usado em App.tsx pra excluir um único registro.
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   // Toast leve pra substituir alert() nativo do navegador (feio, não segue o
   // tema, trava a interação) por um aviso que combina com o resto do sistema.
@@ -275,14 +280,17 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
 
   const handleBulkDelete = () => {
     if (selectedIds.size === 0) return;
-    if (confirm(`Deseja excluir os ${selectedIds.size} registros selecionados?`)) {
-      items.forEach(item => {
-        if (selectedIds.has(item.id)) {
-          onDeleteItem(item.id);
-        }
-      });
-      setSelectedIds(new Set());
-    }
+    setConfirmBulkDelete(true);
+  };
+
+  const confirmBulkDeleteAction = () => {
+    items.forEach(item => {
+      if (selectedIds.has(item.id)) {
+        onDeleteItem(item.id);
+      }
+    });
+    setSelectedIds(new Set());
+    setConfirmBulkDelete(false);
   };
 
   // Unique Competencias & Cost Centers for Filters
@@ -1162,6 +1170,13 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        message={`Deseja excluir os ${selectedIds.size} registros selecionados? Essa ação não pode ser desfeita.`}
+        onConfirm={confirmBulkDeleteAction}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
     </div>
   );
 });
