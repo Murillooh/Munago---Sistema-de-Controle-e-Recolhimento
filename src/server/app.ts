@@ -447,6 +447,13 @@ export async function createApp() {
       })
     : null;
 
+  // Compartilhado entre /api/ai/insights e /api/chat: quando um modelo Gemini
+  // está sobrecarregado (503/429/"high demand" — bem comum, é temporário),
+  // tenta o próximo em vez de já falhar pro usuário.
+  const GEMINI_FALLBACK_MODELS = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite", "gemini-3.1-pro-preview"];
+  const isOverloadedError = (err: any) =>
+    err?.status === 503 || err?.status === 429 || Boolean(err?.message?.includes('high demand'));
+
   // API Health check
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -462,10 +469,9 @@ export async function createApp() {
     }
 
     const { data } = req.body;
-    const models = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite", "gemini-3.1-pro-preview"];
     let lastError: any = null;
 
-    for (const modelName of models) {
+    for (const modelName of GEMINI_FALLBACK_MODELS) {
       try {
         const response = await genAI.models.generateContent({
           model: modelName,
@@ -491,18 +497,18 @@ export async function createApp() {
         console.warn(`AI model ${modelName} unavailable, attempting fallback...`);
 
         // If it's not a 503/High Demand, it's a permanent error (like 400), so stop
-        if (err.status !== 503 && !err.message?.includes('high demand') && err.status !== 429) {
+        if (!isOverloadedError(err)) {
           console.error(`AI Permanent Error with ${modelName}:`, err);
           break;
         }
 
         // Exponential backoff: 500ms, 1000ms, 1500ms...
-        await new Promise(resolve => setTimeout(resolve, models.indexOf(modelName) * 500 + 500));
+        await new Promise(resolve => setTimeout(resolve, GEMINI_FALLBACK_MODELS.indexOf(modelName) * 500 + 500));
       }
     }
 
     // If we get here, all models failed
-    if (lastError?.status === 503 || lastError?.status === 429 || (lastError?.message && lastError.message.includes('high demand'))) {
+    if (isOverloadedError(lastError)) {
       console.error('All AI models currently overwhelmed.');
       return res.json({
         insights: "A Inteligência Munago está operando em capacidade reduzida devido à alta demanda global nos servidores da Google. \n\nSua análise está sendo processada em fila. Por favor, clique em 'Atualizar Análise' em 1 ou 2 minutos.",
@@ -521,35 +527,55 @@ export async function createApp() {
 
     const { prompt, history, context } = req.body;
 
-    try {
-      const chat = genAI.chats.create({
-        model: "gemini-3.8-flash",
-        config: {
-          systemInstruction: `Você é a "Inteligência Munago", o assistente virtual oficial da LocGrupo para gestão de recolhimentos de franquias.
-          Sua missão é ajudar o usuário Murillo Silva a analisar dados, dar recomendações financeiras e tirar dúvidas sobre o sistema.
+    const systemInstruction = `Você é a "Inteligência Munago", o assistente virtual oficial da LocGrupo para gestão de recolhimentos de franquias.
+    Sua missão é ajudar o usuário Murillo Silva a analisar dados, dar recomendações financeiras e tirar dúvidas sobre o sistema.
 
-          CONTEXTO DO SISTEMA:
-          - Dados atuais: ${JSON.stringify(context.items)}
-          - Configurações de Metas: ${JSON.stringify(context.goalSettings)}
+    CONTEXTO DO SISTEMA:
+    - Dados atuais: ${JSON.stringify(context.items)}
+    - Configurações de Metas: ${JSON.stringify(context.goalSettings)}
 
-          DIRETRIZES:
-          1. Seja profissional, analítico e amigável.
-          2. Responda de forma concisa e direta, focando em insights baseados nos dados fornecidos.
-          3. Se o usuário perguntar sobre o sistema, você sabe que ele tem abas de Dashboard, Planilha, Metas, Notificações e Integração ASAAS.
-          4. Use formatação Markdown para facilitar a leitura.
-          5. Se identificar anomalias (ex: muitos pendentes), recomende ações como "Follow-up via ASAAS" ou "Verificação de comprovantes".`
-        },
-        history: history || [],
-      });
+    DIRETRIZES:
+    1. Seja profissional, analítico e amigável.
+    2. Responda de forma concisa e direta, focando em insights baseados nos dados fornecidos.
+    3. Se o usuário perguntar sobre o sistema, você sabe que ele tem abas de Dashboard, Planilha, Metas, Notificações e Integração ASAAS.
+    4. Use formatação Markdown para facilitar a leitura.
+    5. Se identificar anomalias (ex: muitos pendentes), recomende ações como "Follow-up via ASAAS" ou "Verificação de comprovantes".`;
 
-      const result = await chat.sendMessage({ message: prompt });
-      const responseText = result.text;
+    // Mesmo fallback do /api/ai/insights: um modelo sobrecarregado (503/429/
+    // "high demand") não deve virar "erro técnico" pro usuário — tenta o
+    // próximo modelo da lista antes de desistir de verdade.
+    let lastError: any = null;
+    for (const modelName of GEMINI_FALLBACK_MODELS) {
+      try {
+        const chat = genAI.chats.create({
+          model: modelName,
+          config: { systemInstruction },
+          history: history || [],
+        });
 
-      res.json({ text: responseText });
-    } catch (error: any) {
-      console.error('Chat API Error:', error);
-      res.status(500).json({ error: 'Erro ao processar mensagem no chat.' });
+        const result = await chat.sendMessage({ message: prompt });
+        return res.json({ text: result.text });
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`Chat model ${modelName} unavailable, attempting fallback...`);
+
+        if (!isOverloadedError(err)) {
+          console.error(`Chat Permanent Error with ${modelName}:`, err);
+          break;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, GEMINI_FALLBACK_MODELS.indexOf(modelName) * 500 + 500));
+      }
     }
+
+    if (isOverloadedError(lastError)) {
+      return res.json({
+        text: 'A Inteligência Munago está operando em capacidade reduzida devido à alta demanda global nos servidores da Google. Tente de novo em 1 ou 2 minutos.',
+      });
+    }
+
+    console.error('Chat API Error:', lastError);
+    res.status(500).json({ error: 'Erro ao processar mensagem no chat.' });
   });
 
   // ASAAS Bank API Proxy Endpoints
