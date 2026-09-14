@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Bot, User, Sparkles, Minimize2, Maximize2 } from 'lucide-react';
+import { MessageSquare, X, Send, Bot, User, Sparkles, Minimize2, Maximize2, Download, Mic, MicOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { RecolhimentoItem, GoalSettings } from '../types';
@@ -8,6 +8,10 @@ import { exportToPDF } from '../utils/exportImport';
 interface Message {
   role: 'user' | 'model';
   parts: [{ text: string }];
+  // Presente só na resposta que gerou um PDF de verdade — vira botão de
+  // download na bolha da mensagem em vez do usuário depender do download
+  // automático do navegador (que às vezes é bloqueado) ou de um link falado.
+  attachment?: { url: string; filename: string; label: string };
 }
 
 interface ChatAssistantProps {
@@ -66,9 +70,17 @@ const PDF_SCOPES: { match: RegExp; status: RecolhimentoItem['status'] | null; la
   { match: /confirmad/, status: 'Confirmada', label: 'confirmados' },
 ];
 
+// Pedido nem sempre fala "pdf" — "manda um relatório dos recebidos" ou
+// "baixar a lista de atrasados" tem a mesma intenção. Exige um verbo de
+// ação (gerar/mandar/baixar/exportar/...) junto de "relatório"/"lista" pra
+// não disparar em pergunta comum tipo "como está o relatório de recebidos?".
+const ACTION_WORDS = /\b(ger[ae]|gerar|mand[ae]|mandar|quero|preciso|baix[ae]|baixar|export[ae]|exportar|cri[ae]|criar|envi[ae]|enviar|d[eê]\s*(pra|para)?\s*mim)\b/;
+const REPORT_WORDS = /\b(relat[oó]rio|lista|planilha)\b/;
+
 function detectPdfRequest(text: string) {
   const t = text.toLowerCase();
-  if (!/\bpdf\b/.test(t)) return null;
+  const wantsPdf = /\bpdf\b/.test(t) || (ACTION_WORDS.test(t) && REPORT_WORDS.test(t));
+  if (!wantsPdf) return null;
   const scope = PDF_SCOPES.find((s) => s.match.test(t));
   return scope || { match: /.*/, status: null, label: 'de todos os registros' };
 }
@@ -80,12 +92,60 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const objectUrlsRef = useRef<string[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isLoading]);
+
+  // Web Speech API — nativa do navegador (Chrome/Edge), sem chave nem custo
+  // nenhum. Firefox/Safari não suportam; o botão some sozinho nesse caso.
+  const SpeechRecognitionAPI = typeof window !== 'undefined'
+    ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    : null;
+
+  const toggleRecording = () => {
+    if (!SpeechRecognitionAPI) return;
+
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = 'pt-BR';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => setIsRecording(true);
+    recognition.onerror = () => setIsRecording(false);
+    recognition.onend = () => setIsRecording(false);
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0]?.[0]?.transcript || '';
+      setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  // Solta o microfone se o usuário fechar o chat com a gravação ainda ativa.
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop();
+    };
+  }, []);
+
+  // Libera os blobs de PDF gerados quando o chat fecha de vez (componente desmonta).
+  useEffect(() => {
+    return () => {
+      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, []);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -106,11 +166,15 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
             parts: [{ text: `Não achei nenhum registro ${pdfRequest.label} pra colocar no PDF.` }],
           }]);
         } else {
-          await exportToPDF(filtered);
+          const filename = `relatorio_${pdfRequest.label.replace(/\s+/g, '_')}.pdf`;
+          const blob = await exportToPDF(filtered, filename, undefined, { returnBlob: true }) as Blob;
+          const url = URL.createObjectURL(blob);
+          objectUrlsRef.current.push(url);
           const total = filtered.reduce((s, i) => s + (i.valor || 0), 0);
           setMessages(prev => [...prev, {
             role: 'model',
-            parts: [{ text: `Prontinho! Gerei o PDF ${pdfRequest.label} — **${filtered.length} registro${filtered.length > 1 ? 's' : ''}**, R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. O download deve ter começado já.` }],
+            parts: [{ text: `Prontinho! Gerei o PDF ${pdfRequest.label} — **${filtered.length} registro${filtered.length > 1 ? 's' : ''}**, R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.` }],
+            attachment: { url, filename, label: `Baixar PDF ${pdfRequest.label}` },
           }]);
         }
       } catch (err) {
@@ -234,6 +298,16 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
                               {msg.parts[0].text}
                             </ReactMarkdown>
                           </div>
+                          {msg.attachment && (
+                            <a
+                              href={msg.attachment.url}
+                              download={msg.attachment.filename}
+                              className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase tracking-wide rounded-lg shadow-sm transition-colors active:scale-95"
+                            >
+                              <Download className="w-3 h-3" />
+                              {msg.attachment.label}
+                            </a>
+                          )}
                         </div>
                       </div>
                     </motion.div>
@@ -260,9 +334,22 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                      placeholder="Pergunte qualquer coisa..."
-                      className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl py-2.5 pl-4 pr-10 text-[11px] focus:ring-2 focus:ring-blue-500 transition-all outline-none text-slate-900 dark:text-white"
+                      placeholder={isRecording ? 'Ouvindo...' : 'Pergunte qualquer coisa...'}
+                      className={`w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl py-2.5 pl-4 text-[11px] focus:ring-2 focus:ring-blue-500 transition-all outline-none text-slate-900 dark:text-white ${SpeechRecognitionAPI ? 'pr-16' : 'pr-10'}`}
                     />
+                    {SpeechRecognitionAPI && (
+                      <button
+                        onClick={toggleRecording}
+                        title={isRecording ? 'Parar gravação' : 'Falar em vez de digitar'}
+                        className={`absolute right-10 p-1.5 rounded-lg transition-all shadow-md active:scale-95 ${
+                          isRecording
+                            ? 'bg-rose-500 text-white animate-pulse'
+                            : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+                        }`}
+                      >
+                        {isRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                      </button>
+                    )}
                     <button
                       onClick={handleSend}
                       disabled={!input.trim() || isLoading}

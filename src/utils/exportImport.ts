@@ -55,26 +55,32 @@ async function getBase64ImageFromUrl(imageUrl: string): Promise<string | null> {
   }
 }
 
-export async function exportToPDF(data: RecolhimentoItem[], filename = 'relatorio_recolhimento.pdf', visibleColumns?: string[]) {
+export async function exportToPDF(
+  data: RecolhimentoItem[],
+  filename = 'relatorio_recolhimento.pdf',
+  visibleColumns?: string[],
+  options?: { returnBlob?: boolean }
+): Promise<Blob | void> {
   try {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-    // Try loading logo.png
-    const logoBase64 = await getBase64ImageFromUrl('/logo.png');
+    // Ícone da marca Munago (mesmo pin+check dourado do app) — antes carregava
+    // /logo.png, que era a arte de outra empresa (locaAgora) esquecida no projeto.
+    const logoBase64 = await getBase64ImageFromUrl('/logo-pdf.png');
     if (logoBase64) {
       try {
-        doc.addImage(logoBase64, 'PNG', 14, 10, 32, 14);
+        doc.addImage(logoBase64, 'PNG', 14, 8, 16, 16);
       } catch (e) {
         console.warn('Could not add logo as PNG, trying JPEG', e);
         try {
-          doc.addImage(logoBase64, 'JPEG', 14, 10, 32, 14);
+          doc.addImage(logoBase64, 'JPEG', 14, 8, 16, 16);
         } catch (e2) {
           console.error('Could not add logo to PDF', e2);
         }
       }
     }
 
-    const textX = logoBase64 ? 50 : 14;
+    const textX = logoBase64 ? 34 : 14;
 
     // Header Title: Munago
     doc.setFont('helvetica', 'bold');
@@ -145,9 +151,15 @@ export async function exportToPDF(data: RecolhimentoItem[], filename = 'relatori
       margin: { left: 14, right: 14 },
     });
 
+    if (options?.returnBlob) {
+      return doc.output('blob');
+    }
     doc.save(filename);
   } catch (error) {
     console.error('Error generating PDF:', error);
+    // Chamador com returnBlob (ex: chat) trata o erro por conta própria —
+    // um alert() do navegador não faz sentido no meio de uma conversa.
+    if (options?.returnBlob) throw error;
     alert('Erro ao gerar o PDF. Verifique os dados e tente novamente.');
   }
 }
