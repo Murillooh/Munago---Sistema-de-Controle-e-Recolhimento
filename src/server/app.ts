@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import { GoogleGenAI } from '@google/genai';
+import Anthropic from '@anthropic-ai/sdk';
 import { pool, initDb, rowToItem, rowToUser } from './db.js';
 import { configureWebPush, getVapidPublicKey, sendPushToUser } from './push.js';
 
@@ -435,24 +435,14 @@ export async function createApp() {
     }
   });
 
-  // Gemini AI Setup
-  const genAI = process.env.GEMINI_API_KEY
-    ? new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          }
-        }
-      })
+  // Claude (Anthropic) — trocado de Gemini porque o Gemini vivia devolvendo
+  // 503 "alta demanda". O SDK oficial já reexecuta 408/409/429/5xx e erros de
+  // conexão sozinho (maxRetries padrão 2), então não precisa da dança de
+  // trocar de modelo manualmente que o Gemini exigia.
+  const anthropic = process.env.ANTHROPIC_API_KEY
+    ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     : null;
-
-  // Compartilhado entre /api/ai/insights e /api/chat: quando um modelo Gemini
-  // está sobrecarregado (503/429/"high demand" — bem comum, é temporário),
-  // tenta o próximo em vez de já falhar pro usuário.
-  const GEMINI_FALLBACK_MODELS = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite", "gemini-3.1-pro-preview"];
-  const isOverloadedError = (err: any) =>
-    err?.status === 503 || err?.status === 429 || Boolean(err?.message?.includes('high demand'));
+  const CLAUDE_MODEL = 'claude-opus-5';
 
   // API Health check
   app.get('/api/health', (req, res) => {
@@ -461,7 +451,7 @@ export async function createApp() {
 
   // AI Insights Endpoint
   app.post('/api/ai/insights', async (req, res) => {
-    if (!genAI) {
+    if (!anthropic) {
       return res.json({
         insights: "A IA está em modo offline. Configure sua chave API para insights em tempo real.",
         recommendations: ["Verificar vencimentos próximos", "Acompanhar meta mensal"]
@@ -469,59 +459,38 @@ export async function createApp() {
     }
 
     const { data } = req.body;
-    let lastError: any = null;
 
-    for (const modelName of GEMINI_FALLBACK_MODELS) {
-      try {
-        const response = await genAI.models.generateContent({
-          model: modelName,
-          contents: `Analise estes dados de recolhimento de franquias e escreva como alguém que realmente olhou os números e comenta de forma natural, não como um relatório robótico — direto, sem preâmbulo tipo "Com base nos dados fornecidos". Retorne só o JSON {insights: string, recommendations: string[]}: ${JSON.stringify(data)}`,
-          config: {
-            responseMimeType: "application/json",
-          }
-        });
-
-        const text = response.text || '';
-
-        // Attempt to parse JSON from response
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          return res.json(JSON.parse(jsonMatch[0]));
-        }
-
-        return res.json({ insights: text, recommendations: [] });
-      } catch (err: any) {
-        lastError = err;
-
-        // Use warn instead of error for individual model failures during fallback to reduce noise
-        console.warn(`AI model ${modelName} unavailable, attempting fallback...`);
-
-        // If it's not a 503/High Demand, it's a permanent error (like 400), so stop
-        if (!isOverloadedError(err)) {
-          console.error(`AI Permanent Error with ${modelName}:`, err);
-          break;
-        }
-
-        // Exponential backoff: 500ms, 1000ms, 1500ms...
-        await new Promise(resolve => setTimeout(resolve, GEMINI_FALLBACK_MODELS.indexOf(modelName) * 500 + 500));
-      }
-    }
-
-    // If we get here, all models failed
-    if (isOverloadedError(lastError)) {
-      console.error('All AI models currently overwhelmed.');
-      return res.json({
-        insights: "A Inteligência Munago está operando em capacidade reduzida devido à alta demanda global nos servidores da Google. \n\nSua análise está sendo processada em fila. Por favor, clique em 'Atualizar Análise' em 1 ou 2 minutos.",
-        recommendations: ["Aguardar estabilização da rede Google", "Tentar em horário de menor pico", "Verificar conexão"]
+    try {
+      const response = await anthropic.messages.create({
+        model: CLAUDE_MODEL,
+        max_tokens: 2048,
+        system: 'Você analisa dados de recolhimento de franquias e escreve como alguém que realmente olhou os números e comenta de forma natural, não como um relatório robótico — direto, sem preâmbulo tipo "Com base nos dados fornecidos". Responda só com o JSON pedido, nada antes ou depois.',
+        messages: [
+          { role: 'user', content: `Analise estes dados e retorne {"insights": string, "recommendations": string[]}: ${JSON.stringify(data)}` },
+        ],
       });
-    }
 
-    return res.status(500).json({ error: 'Erro crítico ao gerar insights inteligentes.' });
+      const text = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text')?.text || '';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return res.json(JSON.parse(jsonMatch[0]));
+      }
+      return res.json({ insights: text, recommendations: [] });
+    } catch (err: any) {
+      console.error('AI Insights Error:', err);
+      if (err instanceof Anthropic.RateLimitError || (err instanceof Anthropic.APIError && err.status === 529)) {
+        return res.json({
+          insights: "A Inteligência Munago está operando em capacidade reduzida no momento. Tente de novo em 1 ou 2 minutos.",
+          recommendations: ["Tentar novamente em instantes", "Acompanhar meta mensal"]
+        });
+      }
+      return res.status(500).json({ error: 'Erro crítico ao gerar insights inteligentes.' });
+    }
   });
 
   // Chat Assistant Endpoint
   app.post('/api/chat', async (req, res) => {
-    if (!genAI) {
+    if (!anthropic) {
       return res.status(503).json({ error: 'IA Indisponível' });
     }
 
@@ -542,41 +511,34 @@ export async function createApp() {
     - Sem dado suficiente pra responder algo, diga isso com naturalidade em vez de listar todas as abas do sistema.
     - Você conhece o sistema (Dashboard, Planilha, Metas, Notificações, Integração ASAAS) — mencione uma aba só quando fizer sentido pra resposta, não como referência decorada.`;
 
-    // Mesmo fallback do /api/ai/insights: um modelo sobrecarregado (503/429/
-    // "high demand") não deve virar "erro técnico" pro usuário — tenta o
-    // próximo modelo da lista antes de desistir de verdade.
-    let lastError: any = null;
-    for (const modelName of GEMINI_FALLBACK_MODELS) {
-      try {
-        const chat = genAI.chats.create({
-          model: modelName,
-          config: { systemInstruction },
-          history: history || [],
-        });
+    // O front-end manda o histórico no formato antigo (Gemini): role
+    // 'user'|'model' e texto em parts[0].text. Converte pro formato da
+    // Anthropic (role 'user'|'assistant' + content string) sem precisar
+    // mexer no cliente.
+    const anthropicHistory: Anthropic.MessageParam[] = (history || []).map((m: any) => ({
+      role: m.role === 'model' ? 'assistant' : 'user',
+      content: m.parts?.[0]?.text || '',
+    }));
 
-        const result = await chat.sendMessage({ message: prompt });
-        return res.json({ text: result.text });
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`Chat model ${modelName} unavailable, attempting fallback...`);
-
-        if (!isOverloadedError(err)) {
-          console.error(`Chat Permanent Error with ${modelName}:`, err);
-          break;
-        }
-
-        await new Promise(resolve => setTimeout(resolve, GEMINI_FALLBACK_MODELS.indexOf(modelName) * 500 + 500));
-      }
-    }
-
-    if (isOverloadedError(lastError)) {
-      return res.json({
-        text: 'A Inteligência Munago está operando em capacidade reduzida devido à alta demanda global nos servidores da Google. Tente de novo em 1 ou 2 minutos.',
+    try {
+      const response = await anthropic.messages.create({
+        model: CLAUDE_MODEL,
+        max_tokens: 2048,
+        system: systemInstruction,
+        messages: [...anthropicHistory, { role: 'user', content: prompt }],
       });
-    }
 
-    console.error('Chat API Error:', lastError);
-    res.status(500).json({ error: 'Erro ao processar mensagem no chat.' });
+      const text = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text')?.text || '';
+      return res.json({ text });
+    } catch (err: any) {
+      console.error('Chat API Error:', err);
+      if (err instanceof Anthropic.RateLimitError || (err instanceof Anthropic.APIError && err.status === 529)) {
+        return res.json({
+          text: 'A Inteligência Munago está operando em capacidade reduzida no momento. Tente de novo em 1 ou 2 minutos.',
+        });
+      }
+      res.status(500).json({ error: 'Erro ao processar mensagem no chat.' });
+    }
   });
 
   // ASAAS Bank API Proxy Endpoints
