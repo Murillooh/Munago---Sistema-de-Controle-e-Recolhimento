@@ -3,6 +3,7 @@ import { MessageSquare, X, Send, Bot, User, Sparkles, Minimize2, Maximize2 } fro
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { RecolhimentoItem, GoalSettings } from '../types';
+import { exportToPDF } from '../utils/exportImport';
 
 interface Message {
   role: 'user' | 'model';
@@ -54,6 +55,24 @@ function buildContextSummary(items: RecolhimentoItem[], goalSettings: GoalSettin
   };
 }
 
+// Pedido de PDF vira geração de verdade na hora — reaproveita o mesmo PDF
+// com logo e cabeçalho do botão "Exportar" da Planilha (jsPDF roda no
+// navegador, então nem precisa passar pelo Gemini pra isso: mais rápido,
+// sem custo, e o arquivo sai idêntico ao que o resto do sistema já gera).
+const PDF_SCOPES: { match: RegExp; status: RecolhimentoItem['status'] | null; label: string }[] = [
+  { match: /atrasad/, status: 'Atrasado', label: 'atrasados' },
+  { match: /pendent|aguardand/, status: 'Aguardando pagamento', label: 'pendentes' },
+  { match: /recebid/, status: 'Recebida', label: 'recebidos' },
+  { match: /confirmad/, status: 'Confirmada', label: 'confirmados' },
+];
+
+function detectPdfRequest(text: string) {
+  const t = text.toLowerCase();
+  if (!/\bpdf\b/.test(t)) return null;
+  const scope = PDF_SCOPES.find((s) => s.match.test(t));
+  return scope || { match: /.*/, status: null, label: 'de todos os registros' };
+}
+
 export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSettings }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -71,17 +90,44 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
 
-    const userMessage: Message = { role: 'user', parts: [{ text: input }] };
+    const prompt = input;
+    const userMessage: Message = { role: 'user', parts: [{ text: prompt }] };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+
+    const pdfRequest = detectPdfRequest(prompt);
+    if (pdfRequest) {
+      try {
+        const filtered = pdfRequest.status ? items.filter((i) => i.status === pdfRequest.status) : items;
+        if (filtered.length === 0) {
+          setMessages(prev => [...prev, {
+            role: 'model',
+            parts: [{ text: `Não achei nenhum registro ${pdfRequest.label} pra colocar no PDF.` }],
+          }]);
+        } else {
+          await exportToPDF(filtered);
+          const total = filtered.reduce((s, i) => s + (i.valor || 0), 0);
+          setMessages(prev => [...prev, {
+            role: 'model',
+            parts: [{ text: `Prontinho! Gerei o PDF ${pdfRequest.label} — **${filtered.length} registro${filtered.length > 1 ? 's' : ''}**, R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. O download deve ter começado já.` }],
+          }]);
+        }
+      } catch (err) {
+        console.error('PDF generation error:', err);
+        setMessages(prev => [...prev, { role: 'model', parts: [{ text: 'Deu ruim gerando o PDF. Tenta de novo?' }] }]);
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
 
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: input,
+          prompt,
           history: messages,
           context: buildContextSummary(items, goalSettings)
         }),

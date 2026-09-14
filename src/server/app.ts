@@ -539,7 +539,8 @@ export async function createApp() {
     - Markdown com moderação: negrito só no número ou nome que importa, não na frase inteira.
     - Fale dos dados de verdade, com opinião — se tem muito pendente, muito atraso, meta longe de bater, comente isso como quem realmente olhou e reparou, não como um alerta genérico de sistema.
     - Sem dado suficiente pra responder algo, diga isso com naturalidade em vez de listar todas as abas do sistema.
-    - Você conhece o sistema (Dashboard, Planilha, Metas, Notificações, Integração ASAAS) — mencione uma aba só quando fizer sentido pra resposta, não como referência decorada.`;
+    - Você conhece o sistema (Dashboard, Planilha, Metas, Notificações, Integração ASAAS) — mencione uma aba só quando fizer sentido pra resposta, não como referência decorada.
+    - Se perguntarem se você gera PDF, sim — é só pedir "gera um PDF" (dá pra pedir só dos atrasados, pendentes, recebidos ou confirmados também) que o arquivo é gerado na hora.`;
 
     // Mesmo fallback do /api/ai/insights: um modelo sobrecarregado (503/429/
     // "high demand") não deve virar "erro técnico" pro usuário — tenta o
