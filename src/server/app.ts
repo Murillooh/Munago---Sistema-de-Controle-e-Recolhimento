@@ -316,6 +316,23 @@ export async function createApp() {
     }
   });
 
+  // Exclusão em massa: um DELETE só com todos os ids, em vez de uma
+  // requisição por item selecionado.
+  app.post('/api/items/delete-bulk', requireDb, requireAuth, async (req, res) => {
+    try {
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      if (ids.length === 0) return res.json({ success: true, count: 0 });
+      const ownerId = (req as any).authUser.id;
+      const result = await pool!.query(
+        'DELETE FROM recolhimentos WHERE id = ANY($1) AND owner_id = $2 RETURNING id',
+        [ids, ownerId]
+      );
+      res.json({ success: true, count: result.rowCount });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao excluir lançamentos em lote.', details: err.message });
+    }
+  });
+
   // Webhook do ASAAS: chamado por eles automaticamente quando um pagamento muda de
   // status (PAYMENT_RECEIVED, PAYMENT_CONFIRMED, PAYMENT_OVERDUE...). Configure a URL
   // pública deste endpoint no painel ASAAS (Configurações > Webhooks) e, se quiser

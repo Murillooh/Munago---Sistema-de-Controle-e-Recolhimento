@@ -74,6 +74,7 @@ interface TableManagerViewProps {
   onAddItem: (item: RecolhimentoItem) => void;
   onUpdateItem: (item: RecolhimentoItem) => void;
   onDeleteItem: (id: string) => void;
+  onDeleteMultiple: (ids: string[]) => void;
   onImportBulk: (items: RecolhimentoItem[]) => Promise<boolean> | void;
   unidades: Unidade[];
   baseCategories: BaseCategory[];
@@ -87,6 +88,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
     onAddItem,
     onUpdateItem,
     onDeleteItem,
+    onDeleteMultiple,
     onImportBulk,
     unidades,
     baseCategories,
@@ -286,11 +288,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
   };
 
   const confirmBulkDeleteAction = () => {
-    items.forEach(item => {
-      if (selectedIds.has(item.id)) {
-        onDeleteItem(item.id);
-      }
-    });
+    onDeleteMultiple(Array.from(selectedIds));
     setSelectedIds(new Set());
     setConfirmBulkDelete(false);
   };

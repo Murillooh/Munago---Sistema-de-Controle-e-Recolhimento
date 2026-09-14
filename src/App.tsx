@@ -321,6 +321,21 @@ export default function App() {
     });
   };
 
+  // Exclusão em massa vem de quem já pediu confirmação uma vez pro lote
+  // inteiro (TableManagerView) — nada de pedir confirmação de novo aqui,
+  // e nada de chamar handleDeleteItem em loop (cada chamada dispararia sua
+  // própria confirmação e só a última sobrevivia, apagando 1 item só).
+  const handleDeleteMultiple = (ids: string[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    setItems((prev) => prev.filter((item) => !idSet.has(item.id)));
+    fetch('/api/items/delete-bulk', {
+      method: 'POST',
+      headers: itemsAuthHeaders(),
+      body: JSON.stringify({ ids }),
+    }).catch(() => {});
+  };
+
   // Espera a confirmação do servidor antes de considerar sucesso — um import
   // grande fica frágil como fire-and-forget: se a gravação falhar no meio
   // (rede caiu, conexão do banco caiu), o polling de 15s reflete o banco de
@@ -508,6 +523,7 @@ export default function App() {
                 onAddItem={handleAddItem}
                 onUpdateItem={handleUpdateItem}
                 onDeleteItem={handleDeleteItem}
+                onDeleteMultiple={handleDeleteMultiple}
                 onImportBulk={handleImportBulk}
                 unidades={unidades}
                 baseCategories={baseCategories}
