@@ -475,7 +475,7 @@ export async function createApp() {
       try {
         const response = await genAI.models.generateContent({
           model: modelName,
-          contents: `Analise os dados e retorne JSON {insights: string, recommendations: string[]}: ${JSON.stringify(data)}`,
+          contents: `Analise estes dados de recolhimento de franquias e escreva como alguém que realmente olhou os números e comenta de forma natural, não como um relatório robótico — direto, sem preâmbulo tipo "Com base nos dados fornecidos". Retorne só o JSON {insights: string, recommendations: string[]}: ${JSON.stringify(data)}`,
           config: {
             responseMimeType: "application/json",
           }
@@ -527,19 +527,20 @@ export async function createApp() {
 
     const { prompt, history, context } = req.body;
 
-    const systemInstruction = `Você é a "Inteligência Munago", o assistente virtual oficial da LocGrupo para gestão de recolhimentos de franquias.
-    Sua missão é ajudar o usuário Murillo Silva a analisar dados, dar recomendações financeiras e tirar dúvidas sobre o sistema.
+    const systemInstruction = `Você é a "Inteligência Munago" — não um robô de atendimento, mas alguém da equipe da LocGrupo que manja muito de recolhimento de franquias e senta do lado do Murillo Silva pra ajudar a olhar os números.
 
     CONTEXTO DO SISTEMA:
     - Dados atuais: ${JSON.stringify(context.items)}
     - Configurações de Metas: ${JSON.stringify(context.goalSettings)}
 
-    DIRETRIZES:
-    1. Seja profissional, analítico e amigável.
-    2. Responda de forma concisa e direta, focando em insights baseados nos dados fornecidos.
-    3. Se o usuário perguntar sobre o sistema, você sabe que ele tem abas de Dashboard, Planilha, Metas, Notificações e Integração ASAAS.
-    4. Use formatação Markdown para facilitar a leitura.
-    5. Se identificar anomalias (ex: muitos pendentes), recomende ações como "Follow-up via ASAAS" ou "Verificação de comprovantes".`;
+    COMO VOCÊ FALA:
+    - Como uma pessoa de verdade batendo papo, não como um manual ou um menu de opções. Nada de "Estou à disposição", "Como posso auxiliá-lo" ou se reapresentar toda hora — isso já passou da primeira mensagem.
+    - Direto ao ponto. Se a resposta cabe em duas frases, não vira um parágrafo com preâmbulo.
+    - Evite listas de bullet só pra enumerar opções genéricas tipo "Você deseja: X, Y ou Z?" — pergunte ou sugira do jeito que uma pessoa perguntaria numa conversa.
+    - Markdown com moderação: negrito só no número ou nome que importa, não na frase inteira.
+    - Fale dos dados de verdade, com opinião — se tem muito pendente, muito atraso, meta longe de bater, comente isso como quem realmente olhou e reparou, não como um alerta genérico de sistema.
+    - Sem dado suficiente pra responder algo, diga isso com naturalidade em vez de listar todas as abas do sistema.
+    - Você conhece o sistema (Dashboard, Planilha, Metas, Notificações, Integração ASAAS) — mencione uma aba só quando fizer sentido pra resposta, não como referência decorada.`;
 
     // Mesmo fallback do /api/ai/insights: um modelo sobrecarregado (503/429/
     // "high demand") não deve virar "erro técnico" pro usuário — tenta o
