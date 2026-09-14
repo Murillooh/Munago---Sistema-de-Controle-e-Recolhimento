@@ -61,46 +61,35 @@ function buildContextSummary(items: RecolhimentoItem[], goalSettings: GoalSettin
 
 // Pedido de PDF vira geração de verdade na hora — reaproveita o mesmo PDF
 // com logo e cabeçalho do botão "Exportar" da Planilha (jsPDF roda no
-// navegador, então nem precisa passar pelo Gemini pra isso: mais rápido,
+// navegador, então nem precisa passar pelo Gemini pra ISSO: mais rápido,
 // sem custo, e o arquivo sai idêntico ao que o resto do sistema já gera).
-const PDF_SCOPES: { match: RegExp; status: RecolhimentoItem['status'] | null; label: string }[] = [
-  { match: /atrasad/, status: 'Atrasado', label: 'atrasados' },
-  { match: /pendent|aguardand/, status: 'Aguardando pagamento', label: 'pendentes' },
-  { match: /recebid/, status: 'Recebida', label: 'recebidos' },
-  { match: /confirmad/, status: 'Confirmada', label: 'confirmados' },
-];
-
-// Pedido nem sempre fala "pdf" — "manda um relatório dos recebidos" ou
-// "baixar a lista de atrasados" tem a mesma intenção. Exige um verbo de
-// ação (gerar/mandar/baixar/exportar/...) junto de "relatório"/"lista" pra
-// não disparar em pergunta comum tipo "como está o relatório de recebidos?".
+//
+// A INTENÇÃO (quantos itens, quais status, ordem, fração) é interpretada
+// pelo servidor via IA (/api/chat/pdf-intent) em vez de regex fixo — regex
+// nunca cobre "um item só", "metade", "os 3 menores atrasados" e toda
+// variação que alguém pode digitar. Aqui só existe um gatilho leve e
+// barato pra decidir SE vale a pena chamar aquele endpoint.
 const ACTION_WORDS = /\b(ger[ae]|gerar|mand[ae]|mandar|quero|preciso|baix[ae]|baixar|export[ae]|exportar|cri[ae]|criar|envi[ae]|enviar|d[eê]\s*(pra|para)?\s*mim)\b/;
 const REPORT_WORDS = /\b(relat[oó]rio|lista|planilha)\b/;
 
-// "os 10 com valores mais altos", "top 5 maiores", "os 3 menores" — recorta
-// e ordena por valor em vez de mandar tudo. Sem número junto da palavra de
-// ranking (ex: só "os maiores valores"), assume 10 como padrão razoável.
-const DESC_WORDS = /maior|mais alt|mais car|\btop\b/;
-const ASC_WORDS = /menor|mais baix/;
-
-function detectPdfRequest(text: string) {
+function wantsPdf(text: string): boolean {
   const t = text.toLowerCase();
-  const wantsPdf = /\bpdf\b/.test(t) || (ACTION_WORDS.test(t) && REPORT_WORDS.test(t));
-  if (!wantsPdf) return null;
-
-  const scope = PDF_SCOPES.find((s) => s.match.test(t)) || { status: null, label: 'de todos os registros' };
-
-  const isDesc = DESC_WORDS.test(t);
-  const isAsc = ASC_WORDS.test(t);
-  if (!isDesc && !isAsc) return { status: scope.status, label: scope.label, limit: undefined, order: undefined };
-
-  const order: 'desc' | 'asc' = isDesc ? 'desc' : 'asc';
-  const numMatch = t.match(/\b(\d{1,4})\b/);
-  const limit = numMatch ? parseInt(numMatch[1], 10) : 10;
-  const rankLabel = `top ${limit} (${order === 'desc' ? 'maiores' : 'menores'} valores)${scope.status ? ' — ' + scope.label : ''}`;
-
-  return { status: scope.status, label: rankLabel, limit, order };
+  return /\bpdf\b/.test(t) || (ACTION_WORDS.test(t) && REPORT_WORDS.test(t));
 }
+
+interface PdfIntent {
+  status: RecolhimentoItem['status'] | null;
+  limit: number | null;
+  order: 'desc' | 'asc' | null;
+  fraction: number | null;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  Confirmada: 'confirmados',
+  Recebida: 'recebidos',
+  'Aguardando pagamento': 'pendentes',
+  Atrasado: 'atrasados',
+};
 
 export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSettings }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -173,33 +162,56 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
     setInput('');
     setIsLoading(true);
 
-    const pdfRequest = detectPdfRequest(prompt);
-    if (pdfRequest) {
+    if (wantsPdf(prompt)) {
       try {
-        let filtered = pdfRequest.status ? items.filter((i) => i.status === pdfRequest.status) : items;
-        if (pdfRequest.order) {
+        // IA interpreta a intenção de verdade (quantidade, status, ordem,
+        // fração) — cai pra "todos os registros" se o endpoint não
+        // responder nada útil (banco/IA fora do ar), nunca trava o pedido.
+        let intent: PdfIntent = { status: null, limit: null, order: null, fraction: null };
+        try {
+          const intentRes = await fetch('/api/chat/pdf-intent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: prompt }),
+          });
+          if (intentRes.ok) intent = { ...intent, ...(await intentRes.json()) };
+        } catch {
+          // segue com o fallback "todos os registros"
+        }
+
+        let filtered = intent.status ? items.filter((i) => i.status === intent.status) : items;
+
+        if (intent.order) {
           filtered = [...filtered].sort((a, b) =>
-            pdfRequest.order === 'desc' ? (b.valor || 0) - (a.valor || 0) : (a.valor || 0) - (b.valor || 0)
+            intent.order === 'desc' ? (b.valor || 0) - (a.valor || 0) : (a.valor || 0) - (b.valor || 0)
           );
         }
-        if (pdfRequest.limit) {
-          filtered = filtered.slice(0, pdfRequest.limit);
+
+        let limit = intent.limit || undefined;
+        if (!limit && intent.fraction) {
+          limit = Math.max(1, Math.round(filtered.length * intent.fraction));
         }
+        if (limit) filtered = filtered.slice(0, limit);
+
+        const statusLabel = intent.status ? STATUS_LABELS[intent.status] : null;
+        const parts = [statusLabel, limit ? `${limit} registro${limit > 1 ? 's' : ''}` : null, intent.order === 'desc' ? 'maiores valores' : intent.order === 'asc' ? 'menores valores' : null].filter(Boolean);
+        const label = parts.length > 0 ? parts.join(', ') : 'todos os registros';
+
         if (filtered.length === 0) {
           setMessages(prev => [...prev, {
             role: 'model',
-            parts: [{ text: `Não achei nenhum registro ${pdfRequest.label} pra colocar no PDF.` }],
+            parts: [{ text: `Não achei nenhum registro ${statusLabel || ''} pra colocar no PDF.` }],
           }]);
         } else {
-          const filename = `relatorio_${pdfRequest.label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}.pdf`;
+          const filename = `relatorio_${label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}.pdf`;
           const blob = await exportToPDF(filtered, filename, undefined, { returnBlob: true }) as Blob;
           const url = URL.createObjectURL(blob);
           objectUrlsRef.current.push(url);
           const total = filtered.reduce((s, i) => s + (i.valor || 0), 0);
           setMessages(prev => [...prev, {
             role: 'model',
-            parts: [{ text: `Prontinho! Gerei o PDF ${pdfRequest.label} — **${filtered.length} registro${filtered.length > 1 ? 's' : ''}**, R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.` }],
-            attachment: { url, filename, label: `Baixar PDF ${pdfRequest.label}` },
+            parts: [{ text: `Prontinho! Gerei o PDF (${label}) — **${filtered.length} registro${filtered.length > 1 ? 's' : ''}**, R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.` }],
+            attachment: { url, filename, label: `Baixar PDF (${label})` },
           }]);
         }
       } catch (err) {

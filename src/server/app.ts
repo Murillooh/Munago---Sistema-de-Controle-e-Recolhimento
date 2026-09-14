@@ -579,6 +579,46 @@ export async function createApp() {
     res.status(500).json({ error: 'Erro ao processar mensagem no chat.' });
   });
 
+  // Interpreta o pedido de PDF em linguagem natural (qualquer quantidade —
+  // "um item", "todos", "metade", "10 maiores" — e qualquer status) em vez de
+  // depender de regex fixo no cliente, que nunca cobre toda frase possível.
+  // Prompt é minúsculo (só a mensagem do usuário, não a base toda), então
+  // fica rápido mesmo com a planilha grande carregada.
+  app.post('/api/chat/pdf-intent', async (req, res) => {
+    const fallback = { status: null, limit: null, order: null, fraction: null };
+    if (!genAI) return res.json(fallback);
+
+    const { text } = req.body || {};
+    if (!text) return res.json(fallback);
+
+    const prompt = `O usuário pediu um PDF de lançamentos de recolhimento de franquias. Extraia a intenção dele e responda SÓ com o JSON, nada mais:
+{
+  "status": "Confirmada" | "Recebida" | "Aguardando pagamento" | "Atrasado" | null,
+  "limit": número inteiro de quantos registros incluir (1 se for "um item"/"só um"), ou null se não especificou quantidade,
+  "order": "desc" (maiores valores primeiro) | "asc" (menores primeiro) | null,
+  "fraction": número entre 0 e 1 se pediu uma fração tipo "metade" (0.5), "um terço" (0.333), "70%" (0.7), senão null
+}
+"status" null significa todos os status. "Aguardando pagamento" é o status usado pra "pendente"/"aguardando". Pedido do usuário: "${text}"`;
+
+    for (const modelName of GEMINI_FALLBACK_MODELS) {
+      try {
+        const response = await genAI.models.generateContent({
+          model: modelName,
+          contents: prompt,
+          config: { responseMimeType: 'application/json' },
+        });
+        const jsonMatch = (response.text || '').match(/\{[\s\S]*\}/);
+        if (jsonMatch) return res.json({ ...fallback, ...JSON.parse(jsonMatch[0]) });
+        break;
+      } catch (err: any) {
+        console.warn(`PDF intent model ${modelName} unavailable, attempting fallback...`);
+        if (!isOverloadedError(err)) break;
+      }
+    }
+
+    res.json(fallback);
+  });
+
   // ASAAS Bank API Proxy Endpoints
   // Test ASAAS Connection / API Key validity
   app.post('/api/asaas/test-connection', async (req, res) => {
