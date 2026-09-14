@@ -77,12 +77,29 @@ const PDF_SCOPES: { match: RegExp; status: RecolhimentoItem['status'] | null; la
 const ACTION_WORDS = /\b(ger[ae]|gerar|mand[ae]|mandar|quero|preciso|baix[ae]|baixar|export[ae]|exportar|cri[ae]|criar|envi[ae]|enviar|d[eê]\s*(pra|para)?\s*mim)\b/;
 const REPORT_WORDS = /\b(relat[oó]rio|lista|planilha)\b/;
 
+// "os 10 com valores mais altos", "top 5 maiores", "os 3 menores" — recorta
+// e ordena por valor em vez de mandar tudo. Sem número junto da palavra de
+// ranking (ex: só "os maiores valores"), assume 10 como padrão razoável.
+const DESC_WORDS = /maior|mais alt|mais car|\btop\b/;
+const ASC_WORDS = /menor|mais baix/;
+
 function detectPdfRequest(text: string) {
   const t = text.toLowerCase();
   const wantsPdf = /\bpdf\b/.test(t) || (ACTION_WORDS.test(t) && REPORT_WORDS.test(t));
   if (!wantsPdf) return null;
-  const scope = PDF_SCOPES.find((s) => s.match.test(t));
-  return scope || { match: /.*/, status: null, label: 'de todos os registros' };
+
+  const scope = PDF_SCOPES.find((s) => s.match.test(t)) || { status: null, label: 'de todos os registros' };
+
+  const isDesc = DESC_WORDS.test(t);
+  const isAsc = ASC_WORDS.test(t);
+  if (!isDesc && !isAsc) return { status: scope.status, label: scope.label, limit: undefined, order: undefined };
+
+  const order: 'desc' | 'asc' = isDesc ? 'desc' : 'asc';
+  const numMatch = t.match(/\b(\d{1,4})\b/);
+  const limit = numMatch ? parseInt(numMatch[1], 10) : 10;
+  const rankLabel = `top ${limit} (${order === 'desc' ? 'maiores' : 'menores'} valores)${scope.status ? ' — ' + scope.label : ''}`;
+
+  return { status: scope.status, label: rankLabel, limit, order };
 }
 
 export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSettings }) => {
@@ -159,14 +176,22 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
     const pdfRequest = detectPdfRequest(prompt);
     if (pdfRequest) {
       try {
-        const filtered = pdfRequest.status ? items.filter((i) => i.status === pdfRequest.status) : items;
+        let filtered = pdfRequest.status ? items.filter((i) => i.status === pdfRequest.status) : items;
+        if (pdfRequest.order) {
+          filtered = [...filtered].sort((a, b) =>
+            pdfRequest.order === 'desc' ? (b.valor || 0) - (a.valor || 0) : (a.valor || 0) - (b.valor || 0)
+          );
+        }
+        if (pdfRequest.limit) {
+          filtered = filtered.slice(0, pdfRequest.limit);
+        }
         if (filtered.length === 0) {
           setMessages(prev => [...prev, {
             role: 'model',
             parts: [{ text: `Não achei nenhum registro ${pdfRequest.label} pra colocar no PDF.` }],
           }]);
         } else {
-          const filename = `relatorio_${pdfRequest.label.replace(/\s+/g, '_')}.pdf`;
+          const filename = `relatorio_${pdfRequest.label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}.pdf`;
           const blob = await exportToPDF(filtered, filename, undefined, { returnBlob: true }) as Blob;
           const url = URL.createObjectURL(blob);
           objectUrlsRef.current.push(url);
