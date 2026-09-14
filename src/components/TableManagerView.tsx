@@ -20,6 +20,8 @@ import {
   RefreshCw,
   Loader2,
   GripVertical,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DynamicTable } from './DynamicTable';
@@ -359,6 +361,23 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
       return matchesSearch && matchesStatus && matchesCompetencia && matchesCCusto && matchesDate;
     });
   }, [items, search, searchTerm, statusFilter, competenciaFilter, cCustoFilter, startDate, endDate]);
+
+  // Paginação — uma planilha importada facilmente passa de 500-600 linhas;
+  // renderizar tudo de uma vez deixa a tela pesada e a lista gigante de
+  // rolar. Passa "pro lado" (páginas) em vez de uma coluna infinita.
+  const PAGE_SIZE = 50;
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [search, searchTerm, statusFilter, competenciaFilter, cCustoFilter, startDate, endDate]);
+
+  const paginatedItems = useMemo(
+    () => filteredItems.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [filteredItems, safePage]
+  );
 
   const handleOpenAdd = () => {
     setEditingItem(null);
@@ -790,7 +809,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((item) => (
+                paginatedItems.map((item) => (
                   <tr key={item.id} className={`hover:bg-blue-50/40 dark:hover:bg-blue-900/20 transition-colors group ${selectedIds.has(item.id) ? 'bg-blue-50/60 dark:bg-blue-900/30' : ''}`}>
                     <td className="py-2 px-4 text-center">
                       <input
@@ -914,7 +933,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
         </div>
 
         {/* Sticky Table Footer Summary - Compact */}
-        <div className="bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-white px-5 py-2.5 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center z-20 sticky bottom-0">
+        <div className="bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-white px-5 py-2.5 border-t border-slate-200 dark:border-slate-800 flex flex-wrap justify-between items-center gap-3 z-20 sticky bottom-0">
           <div className="flex items-center space-x-4">
             <div className="flex flex-col">
               <span className="text-[8px] text-slate-500 uppercase font-black tracking-widest">Registros</span>
@@ -923,6 +942,30 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
               </span>
             </div>
           </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={safePage === 1}
+                className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-white dark:disabled:hover:bg-slate-800 transition-colors"
+                title="Página anterior"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <span className="text-[10px] font-black uppercase tracking-widest px-1">
+                Página {safePage} <span className="text-slate-400 dark:text-slate-600">/ {totalPages}</span>
+              </span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safePage === totalPages}
+                className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-white dark:disabled:hover:bg-slate-800 transition-colors"
+                title="Próxima página"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           <div className="flex items-center space-x-4">
             <div className="h-6 w-px bg-slate-300 dark:bg-slate-800"></div>
