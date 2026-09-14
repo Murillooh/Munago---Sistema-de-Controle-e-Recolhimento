@@ -1,18 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { RecolhimentoItem } from '../types';
 import { Bell, BellOff, Loader2 } from 'lucide-react';
+import { ensurePushSubscription } from '../utils/push';
 
 interface BrowserNotificationsProps {
   items: RecolhimentoItem[];
   sessionToken: string | null;
-}
-
-// VAPID vem em base64url; a Push API do navegador quer Uint8Array.
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = atob(base64);
-  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
 }
 
 export const BrowserNotifications: React.FC<BrowserNotificationsProps> = ({ items, sessionToken }) => {
@@ -33,40 +26,16 @@ export const BrowserNotifications: React.FC<BrowserNotificationsProps> = ({ item
   }, []);
 
   const enablePush = async (): Promise<boolean> => {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !sessionToken) return false;
+    const result = await ensurePushSubscription(sessionToken);
+    if (!result.ok) return false;
 
-    try {
-      const reg = await navigator.serviceWorker.register('/sw.js');
-      const keyRes = await fetch('/api/push/public-key');
-      const { publicKey } = await keyRes.json();
-      if (!publicKey) return false; // servidor sem VAPID configurada de verdade
+    // Confirmação imediata — prova que funciona sem esperar um prazo vencer de verdade.
+    fetch('/api/push/test', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sessionToken}` },
+    }).catch(() => {});
 
-      let subscription = await reg.pushManager.getSubscription();
-      if (!subscription) {
-        subscription = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey),
-        });
-      }
-
-      const res = await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionToken}` },
-        body: JSON.stringify({ subscription }),
-      });
-      if (!res.ok) return false;
-
-      // Confirmação imediata — prova que funciona sem esperar um prazo vencer de verdade.
-      fetch('/api/push/test', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      }).catch(() => {});
-
-      return true;
-    } catch (err) {
-      console.error('Erro ao ativar push:', err);
-      return false;
-    }
+    return true;
   };
 
   const requestPermission = async () => {

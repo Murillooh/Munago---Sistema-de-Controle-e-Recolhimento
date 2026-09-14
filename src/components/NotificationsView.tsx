@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { RecolhimentoItem, GoalSettings } from '../types';
-import { Bell, Clock, AlertTriangle, CheckCircle2, ShieldAlert, BellRing, Info, XCircle } from 'lucide-react';
+import { Bell, Clock, AlertTriangle, CheckCircle2, ShieldAlert, BellRing, Info, XCircle, Loader2 } from 'lucide-react';
+import { ensurePushSubscription } from '../utils/push';
 
 interface NotificationsViewProps {
   items: RecolhimentoItem[];
   goalSettings: GoalSettings;
   searchTerm: string;
+  sessionToken: string | null;
 }
 
 // dd/mm/aaaa -> Date, pra ordenar por vencimento mais próximo primeiro.
@@ -26,7 +28,7 @@ const byVencimentoAsc = (a: RecolhimentoItem, b: RecolhimentoItem) => {
   return da.getTime() - db.getTime();
 };
 
-export const NotificationsView: React.FC<NotificationsViewProps> = ({ items, goalSettings, searchTerm }) => {
+export const NotificationsView: React.FC<NotificationsViewProps> = ({ items, goalSettings, searchTerm, sessionToken }) => {
   const matchesSearch = (item: RecolhimentoItem) =>
     item.franquia.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.cnpj.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -45,65 +47,79 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ items, goa
   const goalPercentage = Math.min(Math.round((confirmedValue / goalSettings.monthlyGoal) * 100), 100);
   const goalReached = confirmedValue >= goalSettings.monthlyGoal;
 
-  // Feedback dentro do próprio app — o popup nativo do navegador pode ser
-  // silenciosamente engolido pelo sistema operacional (Foco Assistido do
-  // Windows, notificações do Chrome desligadas no SO, etc.) sem lançar erro
-  // nenhum. Sem isso, clicar no botão nesse cenário parece "não fazer nada".
+  // Feedback dentro do próprio app — tanto pra erros de permissão/rede quanto
+  // pro aviso de que o servidor confirmou o envio (o que não garante que o
+  // Windows exibiu o toast: Foco Assistido e notificações do Chrome
+  // desligadas no SO engolem isso silenciosamente, sem lançar erro nenhum).
   const [pushStatus, setPushStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
 
-  const testBrowserNotification = () => {
+  // Testa o pipeline de push de verdade (service worker + VAPID + servidor),
+  // o mesmo usado pros alertas automáticos de prazo — não um Notification()
+  // local, que só prova que o navegador aceita notificações, não que o
+  // sistema de alertas em si funciona.
+  const testRealPush = async () => {
     setPushStatus(null);
 
     if (!('Notification' in window)) {
       setPushStatus({ type: 'error', message: 'Seu navegador não suporta notificações.' });
       return;
     }
-
     if (!window.isSecureContext) {
       setPushStatus({ type: 'error', message: 'Notificações exigem HTTPS ou localhost. Este endereço não é um contexto seguro.' });
       return;
     }
+    if (!sessionToken) {
+      setPushStatus({ type: 'error', message: 'Sessão expirada — faça login de novo pra testar o push.' });
+      return;
+    }
 
-    const fire = () => {
-      try {
-        const n = new Notification('Munago - Teste de Notificação', {
-          body: 'Esta é uma notificação de teste do seu sistema de controle.',
-          icon: '/logo.png',
-          tag: 'munago-teste',
-        });
-        n.onerror = (e) => {
-          console.error('Notification error:', e);
-          setPushStatus({ type: 'error', message: 'O navegador rejeitou a notificação. Veja o console para detalhes.' });
-        };
-        n.onshow = () => setPushStatus({ type: 'success', message: 'Notificação enviada com sucesso!' });
-        // Se "onshow" não disparar em ~1.5s, o navegador aceitou o pedido mas o SO
-        // pode ter engolido a exibição — isso é o mais comum no Windows.
-        setPushStatus({
-          type: 'success',
-          message:
-            'Comando de notificação enviado. Não apareceu nada na tela? No Windows, confira Configurações > Sistema > Notificações (o Chrome/Edge precisa estar liberado lá) e se o Foco Assistido não está ativo.',
-        });
-      } catch (err) {
-        console.error('Falha ao criar notificação:', err);
-        setPushStatus({ type: 'error', message: 'Falha ao exibir notificação. Veja o console para detalhes.' });
-      }
-    };
-
-    if (Notification.permission === 'granted') {
-      fire();
-    } else if (Notification.permission === 'denied') {
+    if (Notification.permission === 'denied') {
       setPushStatus({
         type: 'error',
         message: 'Permissão de notificação bloqueada para este site. Libere clicando no cadeado ao lado do endereço > Notificações > Permitir.',
       });
-    } else {
-      Notification.requestPermission().then((permission) => {
-        if (permission === 'granted') {
-          fire();
-        } else {
-          setPushStatus({ type: 'error', message: 'A permissão para notificações foi negada ou fechada.' });
-        }
+      return;
+    }
+    if (Notification.permission === 'default') {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        setPushStatus({ type: 'error', message: 'A permissão para notificações foi negada ou fechada.' });
+        return;
+      }
+    }
+
+    setPushBusy(true);
+    try {
+      const subscribed = await ensurePushSubscription(sessionToken);
+      if (subscribed.ok === false) {
+        const reasonMessage: Record<string, string> = {
+          unsupported: 'Este navegador não suporta push (falta Service Worker/PushManager).',
+          'no-token': 'Sessão expirada — faça login de novo pra testar o push.',
+          'no-vapid': 'Servidor sem chave VAPID configurada — o push real está desligado neste ambiente.',
+          'server-rejected': 'O servidor recusou a inscrição de push.',
+          'subscribe-failed': 'Falha ao inscrever este navegador pro push. Veja o console para detalhes.',
+        };
+        setPushStatus({ type: 'error', message: reasonMessage[subscribed.reason] });
+        return;
+      }
+
+      const res = await fetch('/api/push/test', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${sessionToken}` },
       });
+      if (!res.ok) throw new Error(`Servidor retornou ${res.status}`);
+
+      setPushStatus({
+        type: 'success',
+        message:
+          'O servidor confirmou o envio do push de teste — chega mesmo com o site fechado. Não apareceu nada em alguns segundos? No Windows, confira Configurações > Sistema > Notificações (libere o Chrome/Edge) e se o Foco Assistido não está ativo.',
+      });
+    } catch (err) {
+      console.error('Falha ao testar push:', err);
+      setPushStatus({ type: 'error', message: 'Falha ao contatar o servidor pra testar o push. Veja o console para detalhes.' });
+    } finally {
+      setPushBusy(false);
     }
   };
 
@@ -126,11 +142,12 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ items, goa
           </div>
 
           <button
-            onClick={testBrowserNotification}
-            className="flex items-center space-x-2 px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border border-white/10 shrink-0"
+            onClick={testRealPush}
+            disabled={pushBusy}
+            className="flex items-center space-x-2 px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border border-white/10 shrink-0 disabled:opacity-60"
           >
-            <BellRing className="w-3.5 h-3.5" />
-            <span>Testar Notificação Push</span>
+            {pushBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BellRing className="w-3.5 h-3.5" />}
+            <span>{pushBusy ? 'Enviando...' : 'Testar Notificação Push'}</span>
           </button>
         </div>
       </div>

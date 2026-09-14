@@ -554,7 +554,7 @@ export default function App() {
               />
             )}
             {activeTab === 'notificacoes' && (
-              <NotificationsView items={items} goalSettings={goalSettings} searchTerm={searchTerm} />
+              <NotificationsView items={items} goalSettings={goalSettings} searchTerm={searchTerm} sessionToken={sessionToken} />
             )}
             {activeTab === 'asaas' && (
               <AsaasIntegrationView items={items} unidades={unidades} onUpdateItem={handleUpdateItem} />
