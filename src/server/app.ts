@@ -12,7 +12,10 @@ import { configureWebPush, getVapidPublicKey, sendPushToUser } from './push.js';
 export async function createApp() {
   const app = express();
 
-  app.use(express.json());
+  // Padrão do Express é 100kb — uma planilha de ~600 linhas com descrição
+  // longa passa fácil disso e a requisição inteira é rejeitada (413) antes
+  // de chegar em qualquer rota. 15mb cobre até importações bem grandes.
+  app.use(express.json({ limit: '15mb' }));
 
   await initDb();
   configureWebPush();
