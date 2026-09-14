@@ -232,24 +232,58 @@ export async function createApp() {
     }
   });
 
+  const ITEM_COLUMNS = [
+    'id', 'franquia', 'cnpj', 'c_custo', 'data_criacao', 'vencimento', 'vencimento_original',
+    'data_pagamento', 'valor', 'status', 'competencia_recolhimento', 'competencia_pagamento',
+    'descricao', 'categoria', 'asaas_id', 'owner_id',
+  ];
+
+  // Um lote de 600+ linhas como 600+ INSERTs sequenciais numa única transação
+  // contra um banco remoto é frágil — uma soneca de rede no meio derruba a
+  // transação inteira (rollback silencioso) mesmo que o cliente já tenha
+  // avisado "importado com sucesso". Em lotes de até 200 linhas por INSERT
+  // (bem abaixo do limite de parâmetros do Postgres) reduz de centenas de
+  // idas-e-voltas pro banco pra só um punhado.
+  const CHUNK_SIZE = 200;
+  async function insertItemsBatch(items: any[], ownerId: string) {
+    const inserted: any[] = [];
+    const client = await pool!.connect();
+    try {
+      await client.query('BEGIN');
+      for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+        const chunk = items.slice(i, i + CHUNK_SIZE);
+        const values: any[] = [];
+        const tuples = chunk.map((item, rowIdx) => {
+          const params = itemToParams(item, ownerId);
+          values.push(...params);
+          const base = rowIdx * ITEM_COLUMNS.length;
+          return `(${ITEM_COLUMNS.map((_, colIdx) => `$${base + colIdx + 1}`).join(',')})`;
+        });
+        const result = await client.query(
+          `INSERT INTO recolhimentos (${ITEM_COLUMNS.join(',')})
+           VALUES ${tuples.join(',')}
+           ON CONFLICT (id) DO NOTHING
+           RETURNING *`,
+          values
+        );
+        inserted.push(...result.rows);
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+    return inserted;
+  }
+
   app.post('/api/items/bulk', requireDb, requireAuth, async (req, res) => {
     const items = Array.isArray(req.body) ? req.body : [];
     const ownerId = (req as any).authUser.id;
     try {
-      const client = await pool!.connect();
-      try {
-        await client.query('BEGIN');
-        for (const item of items) {
-          await client.query(insertItemQuery, itemToParams(item, ownerId));
-        }
-        await client.query('COMMIT');
-      } catch (err) {
-        await client.query('ROLLBACK');
-        throw err;
-      } finally {
-        client.release();
-      }
-      res.json({ success: true, count: items.length });
+      const inserted = await insertItemsBatch(items, ownerId);
+      res.json({ success: true, count: inserted.length, items: inserted.map(rowToItem) });
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao importar lançamentos em lote.', details: err.message });
     }

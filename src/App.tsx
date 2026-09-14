@@ -321,13 +321,32 @@ export default function App() {
     });
   };
 
-  const handleImportBulk = (newItems: RecolhimentoItem[]) => {
+  // Espera a confirmação do servidor antes de considerar sucesso — um import
+  // grande fica frágil como fire-and-forget: se a gravação falhar no meio
+  // (rede caiu, conexão do banco caiu), o polling de 15s reflete o banco de
+  // verdade por cima e os itens "somem sozinhos" pouco depois, sem aviso
+  // nenhum. Devolve true/false pra quem chamou poder avisar o usuário.
+  const handleImportBulk = async (newItems: RecolhimentoItem[]): Promise<boolean> => {
+    const ids = new Set(newItems.map((i) => i.id));
     setItems((prev) => [...newItems, ...prev]);
-    fetch('/api/items/bulk', {
-      method: 'POST',
-      headers: itemsAuthHeaders(),
-      body: JSON.stringify(newItems),
-    }).catch(() => {});
+    try {
+      const res = await fetch('/api/items/bulk', {
+        method: 'POST',
+        headers: itemsAuthHeaders(),
+        body: JSON.stringify(newItems),
+      });
+      // 503 = banco não configurado ainda: modo local de sempre, não é falha
+      // de verdade — os itens ficam só no navegador, sem rollback.
+      if (res.status === 503) return true;
+      if (!res.ok) {
+        setItems((prev) => prev.filter((item) => !ids.has(item.id)));
+        return false;
+      }
+      return true;
+    } catch {
+      setItems((prev) => prev.filter((item) => !ids.has(item.id)));
+      return false;
+    }
   };
 
   const pendingCount = items.filter((i) => i.status === 'Aguardando pagamento').length;

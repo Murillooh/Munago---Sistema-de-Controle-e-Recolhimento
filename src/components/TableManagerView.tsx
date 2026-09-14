@@ -72,7 +72,7 @@ interface TableManagerViewProps {
   onAddItem: (item: RecolhimentoItem) => void;
   onUpdateItem: (item: RecolhimentoItem) => void;
   onDeleteItem: (id: string) => void;
-  onImportBulk: (items: RecolhimentoItem[]) => void;
+  onImportBulk: (items: RecolhimentoItem[]) => Promise<boolean> | void;
   unidades: Unidade[];
   baseCategories: BaseCategory[];
   onNavigateBases: () => void;
@@ -459,8 +459,12 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
     try {
       const parsed = await parseExcelFile(file);
       if (parsed.length > 0) {
-        onImportBulk(parsed);
-        showToast('success', `${parsed.length} registro${parsed.length > 1 ? 's' : ''} importado${parsed.length > 1 ? 's' : ''} da planilha.`);
+        const ok = await onImportBulk(parsed);
+        if (ok === false) {
+          showToast('error', 'Falha ao salvar no servidor — nada foi importado. Tente de novo.');
+        } else {
+          showToast('success', `${parsed.length} registro${parsed.length > 1 ? 's' : ''} importado${parsed.length > 1 ? 's' : ''} da planilha.`);
+        }
       } else {
         showToast('error', 'Nenhum registro válido encontrado na planilha.');
       }
