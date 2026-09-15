@@ -27,6 +27,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { DynamicTable } from './DynamicTable';
 import { ConfirmDialog } from './ConfirmDialog';
 import { exportToExcel, exportToPDF, parseExcelFile } from '../utils/exportImport';
+import { isAsaasSandbox } from '../utils/asaas';
 import { Unidade, BaseCategory } from '../types';
 import {
   DndContext,
@@ -229,20 +230,25 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               apiKey,
-              sandbox: true, // Assuming sandbox for now, ideally should be a setting
+              sandbox: isAsaasSandbox(),
               paymentId: item.asaasId
             })
           });
 
           if (res.ok) {
             const data = await res.json();
-            if (data.status !== item.status) {
+            // Além do status, aproveita pra preencher o link da fatura se o
+            // item ainda não tiver (ex.: cobrança gerada antes dessa coluna existir).
+            const statusChanged = data.status !== item.status;
+            const linkMissing = !item.asaasInvoiceUrl && Boolean(data.invoiceUrl);
+            if (statusChanged || linkMissing) {
               onUpdateItem({
                 ...item,
                 status: data.status,
-                dataPagamento: data.paymentDate ? data.paymentDate.split('-').reverse().join('/') : item.dataPagamento
+                dataPagamento: data.paymentDate ? data.paymentDate.split('-').reverse().join('/') : item.dataPagamento,
+                asaasInvoiceUrl: data.invoiceUrl || item.asaasInvoiceUrl,
               });
-              updatedCount++;
+              if (statusChanged) updatedCount++;
             }
           }
         } catch (err) {

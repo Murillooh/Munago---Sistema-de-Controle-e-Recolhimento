@@ -272,8 +272,8 @@ export async function createApp() {
     INSERT INTO recolhimentos (
       id, franquia, cnpj, c_custo, data_criacao, vencimento, vencimento_original,
       data_pagamento, valor, status, competencia_recolhimento, competencia_pagamento,
-      descricao, categoria, asaas_id, owner_id
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+      descricao, categoria, asaas_id, asaas_invoice_url, owner_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
     ON CONFLICT (id) DO NOTHING
     RETURNING *;
   `;
@@ -282,8 +282,8 @@ export async function createApp() {
       franquia = $2, cnpj = $3, c_custo = $4, data_criacao = $5, vencimento = $6,
       vencimento_original = $7, data_pagamento = $8, valor = $9, status = $10,
       competencia_recolhimento = $11, competencia_pagamento = $12, descricao = $13,
-      categoria = $14, asaas_id = $15
-    WHERE id = $1 AND owner_id = $16
+      categoria = $14, asaas_id = $15, asaas_invoice_url = $16
+    WHERE id = $1 AND owner_id = $17
     RETURNING *;
   `;
   // owner_id sempre vem da sessão autenticada, nunca do corpo da requisição —
@@ -304,6 +304,7 @@ export async function createApp() {
     item.descricao || '',
     item.categoria || null,
     item.asaasId || null,
+    item.asaasInvoiceUrl || null,
     ownerId,
   ];
 
@@ -323,7 +324,7 @@ export async function createApp() {
   const ITEM_COLUMNS = [
     'id', 'franquia', 'cnpj', 'c_custo', 'data_criacao', 'vencimento', 'vencimento_original',
     'data_pagamento', 'valor', 'status', 'competencia_recolhimento', 'competencia_pagamento',
-    'descricao', 'categoria', 'asaas_id', 'owner_id',
+    'descricao', 'categoria', 'asaas_id', 'asaas_invoice_url', 'owner_id',
   ];
 
   // Um lote de 600+ linhas como 600+ INSERTs sequenciais numa única transação
@@ -1099,7 +1100,8 @@ export async function createApp() {
           success: true,
           status: mappedStatus,
           paymentDate: data.paymentDate,
-          asaasStatus: data.status
+          asaasStatus: data.status,
+          invoiceUrl: data.invoiceUrl || data.bankSlipUrl,
         });
       } else {
         return res.status(response.status).json({ error: 'Erro ao buscar status no ASAAS.' });

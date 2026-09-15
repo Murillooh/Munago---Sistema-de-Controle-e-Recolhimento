@@ -14,6 +14,9 @@ export interface RecolhimentoItem {
   descricao: string;
   categoria?: string;
   asaasId?: string;
+  // Link da fatura gerada no ASAAS (invoiceUrl) — persistido pra não sumir
+  // num F5 (antes só existia em estado local da tela ASAAS).
+  asaasInvoiceUrl?: string;
 }
 
 export interface DetailedGoal {

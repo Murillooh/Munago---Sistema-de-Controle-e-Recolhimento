@@ -11,6 +11,7 @@ import {
   Search,
   Zap,
 } from 'lucide-react';
+import { ASAAS_MODE_KEY, isAsaasSandbox } from '../utils/asaas';
 
 interface AsaasIntegrationViewProps {
   items: RecolhimentoItem[];
@@ -20,17 +21,12 @@ interface AsaasIntegrationViewProps {
 
 const onlyDigits = (v: string) => (v || '').replace(/\D/g, '');
 
-// Chave própria (não por usuário) — o modo sandbox/produção é uma escolha
-// de ambiente, não um dado de conta; simples assim evita cobrança de
-// verdade sem querer logo depois de trocar de sessão.
-const ASAAS_MODE_KEY = 'munago_asaas_sandbox';
-
 export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ items, unidades, onUpdateItem }) => {
   // Antes travado em sandbox sem nenhuma forma de mudar pela UI — mesmo com
   // uma chave de produção configurada, não tinha como emitir cobrança real.
   // Sempre começa em sandbox por segurança; só vira produção se o usuário
   // trocar explicitamente (e a escolha fica salva pro próximo acesso).
-  const [sandbox, setSandbox] = useState(() => localStorage.getItem(ASAAS_MODE_KEY) !== 'false');
+  const [sandbox, setSandbox] = useState(isAsaasSandbox);
 
   useEffect(() => {
     localStorage.setItem(ASAAS_MODE_KEY, String(sandbox));
@@ -70,7 +66,9 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
         // Cobrança emitida != paga: mantém "Aguardando pagamento" com o asaasId
         // vinculado, para o botão "Sincronizar ASAAS" (Planilha) conseguir
         // consultar e atualizar o status quando o pagamento for confirmado.
-        onUpdateItem({ ...item, asaasId: data.chargeId });
+        // invoiceUrl persiste no banco — sem isso o link só existia neste
+        // estado local (generatedCharges) e sumia num F5.
+        onUpdateItem({ ...item, asaasId: data.chargeId, asaasInvoiceUrl: data.invoiceUrl || undefined });
         return { ok: true };
       }
       return { ok: false, error: `${item.franquia}: ${data.error || 'erro desconhecido'}` };
@@ -240,6 +238,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
               // se já foi emitida, pra não duplicar cobrança num F5.
               const alreadyEmitted = Boolean(item.asaasId);
               const generated = generatedCharges[item.id];
+              const invoiceUrl = generated?.invoiceUrl || item.asaasInvoiceUrl;
               const unidade = findUnidade(item);
               const hasKey = Boolean(unidade?.asaasApiKey);
               const canSelect = !alreadyEmitted && hasKey;
@@ -269,9 +268,9 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                         <QrCode className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                         <div>
                           <p className="font-bold">Cobrança Gerada no ASAAS (ID: {generated?.chargeId || item.asaasId}) • Aguardando confirmação de pagamento</p>
-                          {generated?.invoiceUrl && (
+                          {invoiceUrl && (
                             <a
-                              href={generated.invoiceUrl}
+                              href={invoiceUrl}
                               target="_blank"
                               rel="noreferrer"
                               className="text-blue-600 dark:text-blue-400 hover:underline flex items-center space-x-1 mt-0.5"
