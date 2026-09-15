@@ -18,7 +18,7 @@ import { BrowserNotifications } from './components/BrowserNotifications';
 import { ChatAssistant } from './components/ChatAssistant';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { motion } from 'motion/react';
-import { Menu, Bell, Download, FileText, Plus, Sun, Moon, HelpCircle, Database, FileBarChart, Search } from 'lucide-react';
+import { Menu, Bell, Download, FileText, Plus, Sun, Moon, HelpCircle, Database, FileBarChart, Search, Undo2 } from 'lucide-react';
 import { exportToExcel, exportToPDF } from './utils/exportImport';
 import { INITIAL_UNIDADES, INITIAL_BASE_CATEGORIES } from './data/initialBases';
 
@@ -314,10 +314,41 @@ export default function App() {
   const [confirmState, setConfirmState] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const askConfirm = (message: string, onConfirm: () => void) => setConfirmState({ message, onConfirm });
 
+  // Excluir some da tela e do banco na hora (não trava em "pendente" —
+  // isso conflitaria com o polling de 15s acima, que traria o item de
+  // volta se ele ainda existisse no banco). "Desfazer" é literalmente
+  // recriar o registro, não cancelar a exclusão em si — mais simples e
+  // não briga com o polling. Só um lote de cada vez: desfazer substitui
+  // qualquer aviso anterior ainda na tela (o de antes continua excluído).
+  const UNDO_WINDOW_MS = 8000;
+  const [undoState, setUndoState] = useState<{ items: RecolhimentoItem[]; timeoutId: ReturnType<typeof setTimeout> } | null>(null);
+
+  const showUndo = (deletedItems: RecolhimentoItem[]) => {
+    setUndoState((prev) => {
+      if (prev) clearTimeout(prev.timeoutId);
+      const timeoutId = setTimeout(() => setUndoState(null), UNDO_WINDOW_MS);
+      return { items: deletedItems, timeoutId };
+    });
+  };
+
+  const handleUndoDelete = () => {
+    setUndoState((prev) => {
+      if (!prev) return null;
+      clearTimeout(prev.timeoutId);
+      setItems((current) => [...prev.items, ...current]);
+      prev.items.forEach((item) => {
+        fetch('/api/items', { method: 'POST', headers: itemsAuthHeaders(), body: JSON.stringify(item) }).catch(() => {});
+      });
+      return null;
+    });
+  };
+
   const handleDeleteItem = (id: string) => {
-    askConfirm('Tem certeza que deseja excluir este registro? Essa ação não pode ser desfeita.', () => {
+    askConfirm('Tem certeza que deseja excluir este registro?', () => {
+      const deleted = items.find((item) => item.id === id);
       setItems((prev) => prev.filter((item) => item.id !== id));
       fetch(`/api/items/${id}`, { method: 'DELETE', headers: itemsAuthHeaders() }).catch(() => {});
+      if (deleted) showUndo([deleted]);
     });
   };
 
@@ -328,12 +359,14 @@ export default function App() {
   const handleDeleteMultiple = (ids: string[]) => {
     if (ids.length === 0) return;
     const idSet = new Set(ids);
+    const deleted = items.filter((item) => idSet.has(item.id));
     setItems((prev) => prev.filter((item) => !idSet.has(item.id)));
     fetch('/api/items/delete-bulk', {
       method: 'POST',
       headers: itemsAuthHeaders(),
       body: JSON.stringify({ ids }),
     }).catch(() => {});
+    if (deleted.length > 0) showUndo(deleted);
   };
 
   // Espera a confirmação do servidor antes de considerar sucesso — um import
@@ -568,6 +601,22 @@ export default function App() {
         </main>
       </div>
       <ChatAssistant items={items} goalSettings={goalSettings} sessionToken={sessionToken} />
+      {undoState && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-3 bg-slate-900 dark:bg-slate-800 text-white pl-4 pr-2 py-2 rounded-2xl shadow-2xl border border-white/10">
+          <span className="text-xs font-bold">
+            {undoState.items.length > 1
+              ? `${undoState.items.length} registros excluídos.`
+              : 'Registro excluído.'}
+          </span>
+          <button
+            onClick={handleUndoDelete}
+            className="flex items-center space-x-1.5 bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+            <span>Desfazer</span>
+          </button>
+        </div>
+      )}
       <ConfirmDialog
         open={!!confirmState}
         message={confirmState?.message ?? ''}

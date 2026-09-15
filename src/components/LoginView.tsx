@@ -154,15 +154,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       <div className="absolute inset-0 z-0 pointer-events-none bg-[radial-gradient(60%_100%_at_50%_0%,rgba(59,130,246,0.14),rgba(59,130,246,0)_70%)] mix-blend-screen" />
       
       <div className="relative z-10 flex flex-col items-center justify-center h-full p-6">
-        <div className="flex items-center gap-4 mb-10 drop-shadow-[0_0_22px_rgba(224,146,20,0.20)]">
+        <div className="flex items-center gap-4 mb-10 drop-shadow-[0_0_22px_rgba(212,160,23,0.25)]">
           <svg className="w-14 h-14" viewBox="0 0 240 240">
-            <circle cx="120" cy="100" r="36" fill="#3b82f6"/>
-            <polygon points="120,64 156,100 120,172 84,100" fill="#3b82f6"/>
+            <defs>
+              <linearGradient id="login-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#f2ca5c" />
+                <stop offset="50%" stopColor="#d4a017" />
+                <stop offset="100%" stopColor="#a3760a" />
+              </linearGradient>
+            </defs>
+            <circle cx="120" cy="100" r="36" fill="url(#login-grad)"/>
+            <polygon points="120,64 156,100 120,172 84,100" fill="url(#login-grad)"/>
             <path d="M103,100 L115,112 L139,84" fill="none" stroke="#0a0a0a" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
           <div>
-            <h1 className="text-[29px] font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8]">Munago</h1>
-            <div className="w-[26px] h-0.5 bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] my-2"></div>
+            <h1 className="text-[29px] font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-[#f2ca5c] via-[#d4a017] to-[#a3760a]">Munago</h1>
+            <div className="w-[26px] h-0.5 bg-gradient-to-r from-[#f2ca5c] to-[#a3760a] my-2"></div>
             <div className="text-[10.5px] font-semibold tracking-[1.4px] text-[#918f9a]">SISTEMA DE CONTROLE E RECOLHIMENTO</div>
           </div>
         </div>

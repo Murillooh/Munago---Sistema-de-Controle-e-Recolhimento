@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { RecolhimentoItem, Unidade } from '../types';
 import {
   CreditCard,
@@ -18,8 +18,21 @@ interface AsaasIntegrationViewProps {
 
 const onlyDigits = (v: string) => (v || '').replace(/\D/g, '');
 
+// Chave própria (não por usuário) — o modo sandbox/produção é uma escolha
+// de ambiente, não um dado de conta; simples assim evita cobrança de
+// verdade sem querer logo depois de trocar de sessão.
+const ASAAS_MODE_KEY = 'munago_asaas_sandbox';
+
 export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ items, unidades, onUpdateItem }) => {
-  const [sandbox] = useState(true);
+  // Antes travado em sandbox sem nenhuma forma de mudar pela UI — mesmo com
+  // uma chave de produção configurada, não tinha como emitir cobrança real.
+  // Sempre começa em sandbox por segurança; só vira produção se o usuário
+  // trocar explicitamente (e a escolha fica salva pro próximo acesso).
+  const [sandbox, setSandbox] = useState(() => localStorage.getItem(ASAAS_MODE_KEY) !== 'false');
+
+  useEffect(() => {
+    localStorage.setItem(ASAAS_MODE_KEY, String(sandbox));
+  }, [sandbox]);
   const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
   const [generatedCharges, setGeneratedCharges] = useState<Record<string, any>>({});
 
@@ -86,10 +99,33 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
             Cada unidade usa sua própria chave de API ASAAS, configurada em Bases &gt; Unidades. A cobrança é gerada com a chave da unidade correspondente à franquia.
           </p>
         </div>
-        <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-200 shrink-0 border border-emerald-400/30">
-          <CreditCard className="w-6 h-6" />
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-200 border border-emerald-400/30">
+            <CreditCard className="w-6 h-6" />
+          </div>
+          <label className="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-full cursor-pointer select-none">
+            <span className={`text-[9px] font-black uppercase tracking-widest ${sandbox ? 'text-white' : 'text-white/50'}`}>Sandbox</span>
+            <span className="relative inline-flex items-center">
+              <input
+                type="checkbox"
+                checked={!sandbox}
+                onChange={(e) => setSandbox(!e.target.checked)}
+                className="sr-only peer"
+              />
+              <span className="w-9 h-5 bg-white/25 peer-checked:bg-rose-500 rounded-full transition-colors" />
+              <span className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
+            </span>
+            <span className={`text-[9px] font-black uppercase tracking-widest ${!sandbox ? 'text-white' : 'text-white/50'}`}>Produção</span>
+          </label>
         </div>
       </div>
+
+      {!sandbox && (
+        <div className="p-4 rounded-xl border border-rose-300 dark:border-rose-800/50 bg-rose-50 dark:bg-rose-900/20 text-rose-800 dark:text-rose-300 text-xs font-bold flex items-center space-x-2.5">
+          <ShieldAlert className="w-4 h-4 shrink-0" />
+          <span>Modo PRODUÇÃO ativo — cobranças geradas agora são reais, com dinheiro de verdade envolvido.</span>
+        </div>
+      )}
 
       {/* Pending Items for ASAAS Billing */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">

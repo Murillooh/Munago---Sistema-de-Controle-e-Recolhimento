@@ -1229,7 +1229,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
 
       <ConfirmDialog
         open={confirmBulkDelete}
-        message={`Deseja excluir os ${selectedIds.size} registros selecionados? Essa ação não pode ser desfeita.`}
+        message={`Deseja excluir os ${selectedIds.size} registros selecionados?`}
         onConfirm={confirmBulkDeleteAction}
         onCancel={() => setConfirmBulkDelete(false)}
       />
