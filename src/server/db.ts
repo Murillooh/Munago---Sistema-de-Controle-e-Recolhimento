@@ -35,6 +35,7 @@ export interface RecolhimentoRow {
   categoria: string | null;
   asaas_id: string | null;
   asaas_invoice_url: string | null;
+  asaas_imported_at: string | null;
   owner_id: string | null;
 }
 
@@ -57,6 +58,7 @@ export function rowToItem(row: RecolhimentoRow) {
     categoria: row.categoria || undefined,
     asaasId: row.asaas_id || undefined,
     asaasInvoiceUrl: row.asaas_invoice_url || undefined,
+    asaasImportedAt: row.asaas_imported_at || undefined,
   };
 }
 
@@ -145,6 +147,9 @@ export function initDb(): Promise<void> {
       -- Link da fatura/cobrança gerada no ASAAS. Sem isso, o link só existia
       -- em memória no navegador (generatedCharges) e sumia num F5.
       ALTER TABLE recolhimentos ADD COLUMN IF NOT EXISTS asaas_invoice_url TEXT;
+      -- Hora em que o import automático de cobranças do ASAAS (App.tsx) trouxe
+      -- esse lançamento pro Munago — só preenchido pra quem veio de lá.
+      ALTER TABLE recolhimentos ADD COLUMN IF NOT EXISTS asaas_imported_at TIMESTAMPTZ;
       CREATE INDEX IF NOT EXISTS idx_recolhimentos_asaas_id ON recolhimentos(asaas_id);
       CREATE INDEX IF NOT EXISTS idx_recolhimentos_owner_id ON recolhimentos(owner_id);
 

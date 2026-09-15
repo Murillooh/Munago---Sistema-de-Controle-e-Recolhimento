@@ -542,6 +542,7 @@ export default function App() {
               descricao: p.description || `Cobrança importada do ASAAS (${unidade.nome})`,
               asaasId: p.id,
               asaasInvoiceUrl: p.invoiceUrl || undefined,
+              asaasImportedAt: new Date().toISOString(),
             };
             handleAddItem(newItem);
             existingAsaasIds.add(p.id);

@@ -17,6 +17,9 @@ export interface RecolhimentoItem {
   // Link da fatura gerada no ASAAS (invoiceUrl) — persistido pra não sumir
   // num F5 (antes só existia em estado local da tela ASAAS).
   asaasInvoiceUrl?: string;
+  // Hora em que o import automático (App.tsx) trouxe esse lançamento do ASAAS
+  // pro Munago — só preenchido pra quem veio de lá, nunca em criação manual.
+  asaasImportedAt?: string;
 }
 
 export interface DetailedGoal {

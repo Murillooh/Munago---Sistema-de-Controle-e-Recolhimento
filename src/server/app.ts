@@ -272,11 +272,13 @@ export async function createApp() {
     INSERT INTO recolhimentos (
       id, franquia, cnpj, c_custo, data_criacao, vencimento, vencimento_original,
       data_pagamento, valor, status, competencia_recolhimento, competencia_pagamento,
-      descricao, categoria, asaas_id, asaas_invoice_url, owner_id
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+      descricao, categoria, asaas_id, asaas_invoice_url, owner_id, asaas_imported_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
     ON CONFLICT (id) DO NOTHING
     RETURNING *;
   `;
+  // Não mexe em asaas_imported_at aqui de propósito — é a hora em que o item
+  // ENTROU no Munago, uma edição posterior (ex: mudar status) não pode mudar isso.
   const updateItemQuery = `
     UPDATE recolhimentos SET
       franquia = $2, cnpj = $3, c_custo = $4, data_criacao = $5, vencimento = $6,
@@ -306,6 +308,7 @@ export async function createApp() {
     item.asaasId || null,
     item.asaasInvoiceUrl || null,
     ownerId,
+    item.asaasImportedAt || null,
   ];
 
   app.post('/api/items', requireDb, requireAuth, async (req, res) => {
@@ -324,7 +327,7 @@ export async function createApp() {
   const ITEM_COLUMNS = [
     'id', 'franquia', 'cnpj', 'c_custo', 'data_criacao', 'vencimento', 'vencimento_original',
     'data_pagamento', 'valor', 'status', 'competencia_recolhimento', 'competencia_pagamento',
-    'descricao', 'categoria', 'asaas_id', 'asaas_invoice_url', 'owner_id',
+    'descricao', 'categoria', 'asaas_id', 'asaas_invoice_url', 'owner_id', 'asaas_imported_at',
   ];
 
   // Um lote de 600+ linhas como 600+ INSERTs sequenciais numa única transação

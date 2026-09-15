@@ -67,6 +67,16 @@ const competenciaFromIso = (iso: string) => {
   return isNaN(d.getTime()) ? '' : `${MONTHS_PT[d.getMonth()]}/${String(d.getFullYear()).slice(-2)}`;
 };
 
+// Hora em que o import automático trouxe a cobrança do ASAAS pro Munago —
+// dd/mm às hh:mm, no fuso do navegador de quem está olhando a tela.
+const formatImportedAt = (iso: string) => {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const data = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return `${data} às ${hora}`;
+};
+
 const EMPTY_AD_HOC_FORM = {
   unidadeId: '',
   // Cliente — pré-preenchido pela busca no ASAAS (customerLookup) quando já existe cadastro.
@@ -597,6 +607,15 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                             : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
                         }`}>
                           {item.status}
+                        </span>
+                      )}
+                      {item.asaasImportedAt && (
+                        <span
+                          title="Hora em que o import automático trouxe essa cobrança do ASAAS pro Munago"
+                          className="flex items-center gap-1 text-[9px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 px-2 py-0.5 rounded-full"
+                        >
+                          <Clock className="w-2.5 h-2.5" />
+                          Puxado às {formatImportedAt(item.asaasImportedAt)}
                         </span>
                       )}
                     </div>
