@@ -1,5 +1,11 @@
 import { RecolhimentoItem, Unidade } from '../types';
 
+// Intervalo do polling automático que importa pro Munago cobranças lançadas
+// direto no ASAAS (ver App.tsx). Compartilhado com a tela ASAAS só pra
+// exibir o cronômetro regressivo — os dois usam o mesmo número de propósito,
+// mas rodam como intervalos independentes (a tela não sabe do fetch real).
+export const ASAAS_AUTO_IMPORT_INTERVAL_MS = 90000;
+
 const onlyDigits = (v: string) => (v || '').replace(/\D/g, '');
 const normalize = (s: string) =>
   (s || '')

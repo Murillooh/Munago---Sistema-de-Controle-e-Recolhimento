@@ -20,8 +20,9 @@ import {
   Mail,
   Phone,
   MapPin,
+  Clock,
 } from 'lucide-react';
-import { findUnidadeForItem } from '../utils/unidades';
+import { findUnidadeForItem, ASAAS_AUTO_IMPORT_INTERVAL_MS } from '../utils/unidades';
 
 // Campos de cliente que o ASAAS aceita ao criar/cobrar (fora nome/CNPJ, que
 // já vêm da franquia) — buscados do cadastro existente pra "Cobrança Avulsa"
@@ -109,6 +110,20 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   useEffect(() => {
     localStorage.setItem(BILLING_TYPE_KEY, billingType);
   }, [billingType]);
+
+  // Cronômetro visual da próxima checagem automática de cobranças novas no
+  // ASAAS (import feito em App.tsx, a cada ASAAS_AUTO_IMPORT_INTERVAL_MS) —
+  // só de exibição, roda um intervalo próprio em vez de tentar sincronizar
+  // com o timer real do App (não vale a pena o acoplamento pra um cronômetro).
+  const [secondsUntilImportCheck, setSecondsUntilImportCheck] = useState(ASAAS_AUTO_IMPORT_INTERVAL_MS / 1000);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSecondsUntilImportCheck((s) => (s <= 1 ? ASAAS_AUTO_IMPORT_INTERVAL_MS / 1000 : s - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+  const importCountdownLabel = `${Math.floor(secondsUntilImportCheck / 60)}:${String(secondsUntilImportCheck % 60).padStart(2, '0')}`;
+
   // Conjunto em vez de um id só — geração em lote dispara várias ao mesmo
   // tempo, cada botão precisa saber só se A SUA cobrança está em andamento.
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
@@ -388,6 +403,16 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
           <span className="flex items-center gap-1.5 bg-rose-500/90 px-3 py-1.5 rounded-full">
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
             <span className="text-[9px] font-black uppercase tracking-widest text-white">Produção (real)</span>
+          </span>
+
+          <span
+            className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-full"
+            title="Verificação automática de cobranças novas lançadas direto no ASAAS"
+          >
+            <Clock className="w-3 h-3 text-white/70" />
+            <span className="text-[9px] font-black uppercase tracking-widest text-white/90">
+              Próxima verificação em {importCountdownLabel}
+            </span>
           </span>
 
           <div className="flex items-center gap-1 bg-black/20 p-1 rounded-full">

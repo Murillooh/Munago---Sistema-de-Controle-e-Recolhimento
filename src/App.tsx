@@ -23,6 +23,7 @@ import { Menu, Bell, Download, FileText, Plus, Sun, Moon, HelpCircle, Database, 
 import { exportToExcel, exportToPDF } from './utils/exportImport';
 import { INITIAL_UNIDADES, INITIAL_BASE_CATEGORIES } from './data/initialBases';
 import { canAccessTab } from './utils/permissions';
+import { ASAAS_AUTO_IMPORT_INTERVAL_MS } from './utils/unidades';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -542,7 +543,7 @@ export default function App() {
     };
 
     importNewAsaasCharges();
-    const interval = setInterval(importNewAsaasCharges, 90000);
+    const interval = setInterval(importNewAsaasCharges, ASAAS_AUTO_IMPORT_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(interval);
