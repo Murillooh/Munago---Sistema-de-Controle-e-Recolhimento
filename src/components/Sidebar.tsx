@@ -26,12 +26,11 @@ import {
 } from 'lucide-react';
 import { exportToExcel, exportToPDF } from '../utils/exportImport';
 
-// Contato de suporte — placeholders até o Murillo mandar o e-mail e o
-// WhatsApp de verdade. WhatsApp só com dígitos (DDI+DDD+número, sem
-// espaço/traço/parênteses), formato que o link wa.me espera.
-const SUPPORT_EMAIL = 'suporte@munago.com.br';
-const SUPPORT_WHATSAPP = '5511999999999';
-const SUPPORT_WHATSAPP_DISPLAY = '+55 11 99999-9999';
+// Contato de suporte. WhatsApp só com dígitos (DDI+DDD+número), formato
+// que o link wa.me espera.
+const SUPPORT_EMAIL = 'muurisattos@gmail.com';
+const SUPPORT_WHATSAPP = '5511951366825';
+const SUPPORT_WHATSAPP_DISPLAY = '+55 11 95136-6825';
 
 interface SidebarProps {
   activeTab: ActiveTab;
