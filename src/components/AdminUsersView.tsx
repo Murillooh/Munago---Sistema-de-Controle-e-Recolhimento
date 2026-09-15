@@ -450,24 +450,22 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ sessionToken, cu
                 />
               </label>
 
-              {!permFullAccess && (
-                <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
-                  {PERMISSION_TABS.map((tab) => (
-                    <label
-                      key={tab.id}
-                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={permSelection.has(tab.id)}
-                        onChange={() => togglePermTab(tab.id)}
-                        className="w-4 h-4 accent-indigo-600"
-                      />
-                      {tab.label}
-                    </label>
-                  ))}
-                </div>
-              )}
+              <div className={`space-y-1.5 max-h-64 overflow-y-auto pr-1 ${permFullAccess ? 'opacity-40 pointer-events-none' : ''}`}>
+                {PERMISSION_TABS.map((tab) => (
+                  <label
+                    key={tab.id}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={permFullAccess || permSelection.has(tab.id)}
+                      onChange={() => togglePermTab(tab.id)}
+                      className="w-4 h-4 accent-indigo-600"
+                    />
+                    {tab.label}
+                  </label>
+                ))}
+              </div>
 
               <div className="flex gap-2 pt-2">
                 <button
