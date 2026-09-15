@@ -1,12 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { RecolhimentoItem } from '../types';
 import { Bell, BellOff, Loader2 } from 'lucide-react';
-import { ensurePushSubscription } from '../utils/push';
+import { ensurePushSubscription, EnsurePushSubscriptionResult } from '../utils/push';
 
 interface BrowserNotificationsProps {
   items: RecolhimentoItem[];
   sessionToken: string | null;
 }
+
+// Mensagem curta e visível na tela (sem precisar abrir o console — no
+// celular não dá) explicando por que a inscrição de push falhou.
+const FAIL_REASON_LABEL: Record<string, string> = {
+  unsupported: 'Este navegador não suporta notificação push.',
+  'no-token': 'Sessão expirada — faça login de novo.',
+  'no-vapid': 'Servidor sem chave VAPID configurada (variável de ambiente).',
+  'server-rejected': 'O servidor recusou a inscrição.',
+  'subscribe-failed': 'Falha ao inscrever este navegador — veja o console.',
+};
 
 export const BrowserNotifications: React.FC<BrowserNotificationsProps> = ({ items, sessionToken }) => {
   const [permission, setPermission] = useState<NotificationPermission>(
@@ -14,6 +24,7 @@ export const BrowserNotifications: React.FC<BrowserNotificationsProps> = ({ item
   );
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [failReason, setFailReason] = useState<string | null>(null);
 
   // Se já tem inscrição de push ativa neste navegador (de uma sessão anterior),
   // não mostra o botão de novo — o alerta já funciona mesmo com tudo fechado.
@@ -26,9 +37,14 @@ export const BrowserNotifications: React.FC<BrowserNotificationsProps> = ({ item
   }, []);
 
   const enablePush = async (): Promise<boolean> => {
-    const result = await ensurePushSubscription(sessionToken);
-    if (!result.ok) return false;
+    const result: EnsurePushSubscriptionResult = await ensurePushSubscription(sessionToken);
+    if (result.ok === false) {
+      console.error('[push] Falha ao inscrever:', result.reason, result.details);
+      setFailReason(FAIL_REASON_LABEL[result.reason] || `Falha desconhecida (${result.reason}).`);
+      return false;
+    }
 
+    setFailReason(null);
     // Confirmação imediata — prova que funciona sem esperar um prazo vencer de verdade.
     fetch('/api/push/test', {
       method: 'POST',
@@ -122,7 +138,12 @@ export const BrowserNotifications: React.FC<BrowserNotificationsProps> = ({ item
   // pedir ao usuário, só avisar que o alerta só funciona com a aba aberta.
   if (permission === 'granted' && !pushSubscribed) {
     return (
-      <div className="fixed bottom-6 right-6 z-[60]">
+      <div className="fixed bottom-6 right-6 z-[60] flex flex-col items-end gap-1.5 max-w-[280px]">
+        {failReason && (
+          <div className="bg-rose-950/90 backdrop-blur-md text-rose-300 px-3 py-1.5 rounded-lg border border-rose-500/20 text-[10px] font-semibold text-right">
+            {failReason}
+          </div>
+        )}
         <button
           onClick={retryEnablePush}
           disabled={busy}
