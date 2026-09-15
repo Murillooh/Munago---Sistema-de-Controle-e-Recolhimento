@@ -11,8 +11,6 @@ import {
   Search,
   Zap,
 } from 'lucide-react';
-import { ASAAS_MODE_KEY, isAsaasSandbox } from '../utils/asaas';
-
 interface AsaasIntegrationViewProps {
   items: RecolhimentoItem[];
   unidades: Unidade[];
@@ -30,15 +28,10 @@ const BILLING_TYPE_OPTIONS: { value: AsaasBillingType; label: string }[] = [
 ];
 
 export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ items, unidades, onUpdateItem }) => {
-  // Antes travado em sandbox sem nenhuma forma de mudar pela UI — mesmo com
-  // uma chave de produção configurada, não tinha como emitir cobrança real.
-  // Sempre começa em sandbox por segurança; só vira produção se o usuário
-  // trocar explicitamente (e a escolha fica salva pro próximo acesso).
-  const [sandbox, setSandbox] = useState(isAsaasSandbox);
-
-  useEffect(() => {
-    localStorage.setItem(ASAAS_MODE_KEY, String(sandbox));
-  }, [sandbox]);
+  // Antes existia toggle Sandbox/Produção — pedido explícito do usuário pra
+  // sempre ser real, sem alternância nenhuma (evita esquecer trocado e uma
+  // cobrança de verdade cair como teste, ou vice-versa).
+  const sandbox = false;
 
   // Antes o servidor gerava sempre PIX, sem opção nenhuma — nunca existia
   // boleto de verdade mesmo a tela falando "Pix/Boleto". "Pix + Boleto"
@@ -180,20 +173,10 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
           <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-200 border border-emerald-400/30">
             <CreditCard className="w-6 h-6" />
           </div>
-          <label className="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-full cursor-pointer select-none">
-            <span className={`text-[9px] font-black uppercase tracking-widest ${sandbox ? 'text-white' : 'text-white/50'}`}>Sandbox</span>
-            <span className="relative inline-flex items-center">
-              <input
-                type="checkbox"
-                checked={!sandbox}
-                onChange={(e) => setSandbox(!e.target.checked)}
-                className="sr-only peer"
-              />
-              <span className="w-9 h-5 bg-white/25 peer-checked:bg-rose-500 rounded-full transition-colors" />
-              <span className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
-            </span>
-            <span className={`text-[9px] font-black uppercase tracking-widest ${!sandbox ? 'text-white' : 'text-white/50'}`}>Produção</span>
-          </label>
+          <span className="flex items-center gap-1.5 bg-rose-500/90 px-3 py-1.5 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+            <span className="text-[9px] font-black uppercase tracking-widest text-white">Produção (real)</span>
+          </span>
 
           <div className="flex items-center gap-1 bg-black/20 p-1 rounded-full">
             {BILLING_TYPE_OPTIONS.map((opt) => (
@@ -213,12 +196,10 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
         </div>
       </div>
 
-      {!sandbox && (
-        <div className="p-4 rounded-xl border border-rose-300 dark:border-rose-800/50 bg-rose-50 dark:bg-rose-900/20 text-rose-800 dark:text-rose-300 text-xs font-bold flex items-center space-x-2.5">
-          <ShieldAlert className="w-4 h-4 shrink-0" />
-          <span>Modo PRODUÇÃO ativo — cobranças geradas agora são reais, com dinheiro de verdade envolvido.</span>
-        </div>
-      )}
+      <div className="p-4 rounded-xl border border-rose-300 dark:border-rose-800/50 bg-rose-50 dark:bg-rose-900/20 text-rose-800 dark:text-rose-300 text-xs font-bold flex items-center space-x-2.5">
+        <ShieldAlert className="w-4 h-4 shrink-0" />
+        <span>Modo PRODUÇÃO — toda cobrança gerada aqui é real, com dinheiro de verdade envolvido.</span>
+      </div>
 
       {/* Pending Items for ASAAS Billing */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">

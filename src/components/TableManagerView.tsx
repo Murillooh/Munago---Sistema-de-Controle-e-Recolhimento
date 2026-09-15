@@ -27,7 +27,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { DynamicTable } from './DynamicTable';
 import { ConfirmDialog } from './ConfirmDialog';
 import { exportToExcel, exportToPDF, parseExcelFile } from '../utils/exportImport';
-import { isAsaasSandbox } from '../utils/asaas';
 import { Unidade, BaseCategory } from '../types';
 import {
   DndContext,
@@ -230,7 +229,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               apiKey,
-              sandbox: isAsaasSandbox(),
+              sandbox: false, // sempre produção — sem alternância (pedido do usuário)
               paymentId: item.asaasId
             })
           });
