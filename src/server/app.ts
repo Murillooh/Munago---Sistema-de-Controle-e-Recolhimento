@@ -56,6 +56,7 @@ export async function createApp() {
     if (!user || user.role !== 'admin' || user.status !== 'approved') {
       return res.status(403).json({ error: 'Acesso restrito a administradores.' });
     }
+    (req as any).authUser = user;
     next();
   };
 
