@@ -276,20 +276,21 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
               height: isMinimized ? '64px' : '500px'
             }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className={`mb-4 w-[350px] sm:w-[400px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden transition-all duration-300`}
+            className={`mb-4 w-[350px] sm:w-[400px] rounded-2xl shadow-2xl shadow-black/10 dark:shadow-black/40 flex flex-col overflow-hidden transition-all duration-300 border border-slate-200/60 dark:border-slate-700/40 bg-white/90 dark:bg-slate-900/95 backdrop-blur-xl`}
           >
             {/* Header */}
-            <div className="p-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex items-center justify-between shadow-md">
-              <div className="flex items-center space-x-2">
-                <div className="p-1.5 bg-white/20 rounded-lg">
+            <div className="p-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white flex items-center justify-between shadow-lg relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.12),transparent_60%)] pointer-events-none" />
+              <div className="flex items-center space-x-2 relative z-10">
+                <div className="p-1.5 bg-white/15 rounded-lg backdrop-blur-sm border border-white/10">
                   <Sparkles className="w-4 h-4 text-blue-100" />
                 </div>
                 <div>
                   <h3 className="text-xs font-black uppercase tracking-widest">Inteligência Munago</h3>
-                  <p className="text-[9px] text-blue-100 font-bold opacity-80">Assistente LocGrupo</p>
+                  <p className="text-[9px] text-blue-100/80 font-bold">Assistente LocGrupo</p>
                 </div>
               </div>
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center space-x-1 relative z-10">
                 <button 
                   onClick={() => setIsMinimized(!isMinimized)}
                   className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
@@ -313,9 +314,9 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
                   className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50 dark:bg-slate-950/50"
                 >
                   {messages.length === 0 && (
-                    <div className="text-center py-8 space-y-3">
-                      <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto">
-                        <Bot className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                    <div className="text-center py-8 space-y-4">
+                      <div className="w-14 h-14 bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/40 dark:to-indigo-900/30 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
+                        <Bot className="w-7 h-7 text-blue-600 dark:text-blue-400" />
                       </div>
                       <div>
                         <p className="text-xs font-black text-slate-800 dark:text-slate-200">Olá Murillo!</p>
@@ -323,13 +324,13 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
                           Como posso ajudar você hoje? Posso analisar os recolhimentos, verificar metas ou dar recomendações estratégicas.
                         </p>
                       </div>
-                      <div className="flex flex-wrap justify-center gap-1.5 px-3 pt-1">
+                      <div className="flex flex-wrap justify-center gap-2 px-3 pt-2">
                         {SUGGESTIONS.map((suggestion) => (
                           <button
                             key={suggestion}
                             onClick={() => handleSend(suggestion)}
                             disabled={isLoading}
-                            className="px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[9.5px] font-bold text-slate-600 dark:text-slate-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-50"
+                            className="px-3 py-2 bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60 rounded-xl text-[9.5px] font-bold text-slate-600 dark:text-slate-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 hover:shadow-sm hover:shadow-blue-500/10 transition-all duration-200 disabled:opacity-50 hover:scale-[1.02] active:scale-[0.98]"
                           >
                             {suggestion}
                           </button>
@@ -345,15 +346,15 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
                       className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                     >
                       <div className={`flex max-w-[85%] space-x-2 ${msg.role === 'user' ? 'flex-row-reverse space-x-reverse' : 'flex-row'}`}>
-                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                          msg.role === 'user' ? 'bg-slate-200 dark:bg-slate-800' : 'bg-blue-600'
+                        <div className={`w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                          msg.role === 'user' ? 'bg-slate-200/80 dark:bg-slate-800' : 'bg-gradient-to-br from-blue-600 to-indigo-600 shadow-sm'
                         }`}>
                           {msg.role === 'user' ? <User className="w-3.5 h-3.5 text-slate-600" /> : <Bot className="w-3.5 h-3.5 text-white" />}
                         </div>
-                        <div className={`p-3 rounded-2xl text-[11px] leading-relaxed shadow-sm ${
+                        <div className={`p-3 rounded-2xl text-[11px] leading-relaxed ${
                           msg.role === 'user' 
-                            ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-tr-none' 
-                            : 'bg-blue-50 dark:bg-blue-900/20 text-slate-800 dark:text-slate-200 rounded-tl-none border border-blue-100 dark:border-blue-900/30'
+                            ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-tr-none shadow-sm' 
+                            : 'bg-gradient-to-br from-blue-50 to-indigo-50/50 dark:from-blue-900/20 dark:to-indigo-900/10 text-slate-800 dark:text-slate-200 rounded-tl-none border border-blue-100/80 dark:border-blue-900/30 shadow-sm'
                         }`}>
                           <div className="markdown-body prose prose-slate dark:prose-invert max-w-none prose-xs">
                             <ReactMarkdown>
@@ -364,7 +365,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
                             <a
                               href={msg.attachment.url}
                               download={msg.attachment.filename}
-                              className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase tracking-wide rounded-lg shadow-sm transition-colors active:scale-95"
+                              className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[10px] font-black uppercase tracking-wide rounded-lg shadow-md shadow-blue-600/20 transition-all active:scale-95"
                             >
                               <Download className="w-3 h-3" />
                               {msg.attachment.label}
@@ -389,7 +390,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
                 </div>
 
                 {/* Input */}
-                <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
+                <div className="p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-t border-slate-100/80 dark:border-slate-800/60">
                   <div className="relative flex items-center">
                     <input
                       type="text"
@@ -397,7 +398,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
                       onChange={(e) => setInput(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && handleSend()}
                       placeholder={isRecording ? 'Ouvindo...' : 'Pergunte qualquer coisa...'}
-                      className={`w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl py-2.5 pl-4 text-[11px] focus:ring-2 focus:ring-blue-500 transition-all outline-none text-slate-900 dark:text-white ${SpeechRecognitionAPI ? 'pr-16' : 'pr-10'}`}
+                      className={`w-full bg-slate-50/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/40 rounded-xl py-2.5 pl-4 text-[11px] focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400/50 transition-all outline-none text-slate-900 dark:text-white placeholder-slate-400 ${SpeechRecognitionAPI ? 'pr-16' : 'pr-10'}`}
                     />
                     {SpeechRecognitionAPI && (
                       <button
@@ -415,7 +416,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
                     <button
                       onClick={() => handleSend()}
                       disabled={!input.trim() || isLoading}
-                      className="absolute right-2 p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all shadow-md active:scale-95"
+                      className="absolute right-2 p-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 transition-all shadow-md shadow-blue-600/20 active:scale-95"
                     >
                       <Send className="w-3.5 h-3.5" />
                     </button>
@@ -432,7 +433,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
         whileTap={{ scale: 0.95 }}
         onClick={() => setIsOpen(!isOpen)}
         className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 ${
-          isOpen ? 'bg-slate-100 dark:bg-slate-800 text-slate-600' : 'bg-blue-600 text-white'
+          isOpen ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 shadow-lg' : 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-xl shadow-blue-600/30'
         }`}
       >
         {isOpen ? <X className="w-6 h-6" /> : <MessageSquare className="w-6 h-6" />}
@@ -440,7 +441,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
           <motion.div 
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 border-2 border-white dark:border-slate-950 rounded-full flex items-center justify-center"
+            className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 border-2 border-white dark:border-slate-950 rounded-full flex items-center justify-center glow-pulse"
           >
             <Sparkles className="w-2.5 h-2.5 text-white" />
           </motion.div>

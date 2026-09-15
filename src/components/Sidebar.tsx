@@ -59,7 +59,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Sidebar Container */}
       <aside
         id="tour-sidebar"
-        className={`fixed md:static inset-y-0 left-0 z-50 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 ease-in-out ${
+        className={`fixed md:static inset-y-0 left-0 z-50 bg-gradient-to-b from-white via-white to-slate-50/80 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100 border-r border-slate-200/80 dark:border-slate-800/60 transition-all duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         } ${isCollapsed ? 'w-16' : 'w-64'}`}
       >
@@ -76,7 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         {/* Brand Header - Compact */}
-        <div className={`p-4 border-b border-slate-200 dark:border-slate-800 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+        <div className={`p-4 border-b border-slate-200/60 dark:border-slate-800/40 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
           {!isCollapsed && <MunagoLogo size="sm" />}
           <button
             onClick={() => setIsOpen(false)}
@@ -93,8 +93,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onAddNew();
               setIsOpen(false);
             }}
-            className={`w-full flex items-center justify-center bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all uppercase tracking-widest shadow-md shadow-blue-600/20 ${
-              isCollapsed ? 'p-2' : 'space-x-1.5 py-2 px-3 text-[11px] font-black'
+            className={`w-full flex items-center justify-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl transition-all uppercase tracking-widest shadow-lg shadow-blue-600/25 hover:shadow-blue-500/30 hover:scale-[1.02] active:scale-[0.98] ${
+              isCollapsed ? 'p-2' : 'space-x-1.5 py-2.5 px-3 text-[11px] font-black'
             }`}
             title="Novo Registro"
           >
@@ -104,9 +104,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Navigation Links - Denser */}
-        <nav className="flex-1 px-3 py-1 space-y-0.5 overflow-y-auto custom-scrollbar">
+        <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto custom-scrollbar">
           {!isCollapsed && (
-            <p className="px-2 pb-1.5 text-[9px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-widest">
+            <p className="px-2 pb-2 text-[9px] font-black text-slate-400/80 dark:text-slate-600 uppercase tracking-[0.15em]">
               Menu
             </p>
           )}
@@ -116,12 +116,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               setActiveTab('dashboard');
               setIsOpen(false);
             }}
-            className={`w-full flex items-center rounded-lg transition-all ${
+            className={`w-full flex items-center rounded-xl transition-all duration-200 ${
               isCollapsed ? 'justify-center p-2.5' : 'space-x-2.5 px-3 py-2.5 text-[11px] font-bold'
             } ${
               activeTab === 'dashboard'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white hover:translate-x-0.5'
             }`}
             title="Dashboard"
           >
@@ -134,12 +134,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               setActiveTab('tabela');
               setIsOpen(false);
             }}
-            className={`w-full flex items-center rounded-lg transition-all ${
+            className={`w-full flex items-center rounded-xl transition-all duration-200 ${
               isCollapsed ? 'justify-center p-2.5' : 'space-x-2.5 px-3 py-2.5 text-[11px] font-bold'
             } ${
               activeTab === 'tabela'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white hover:translate-x-0.5'
             }`}
             title="Planilha"
           >
@@ -152,12 +152,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               setActiveTab('bases');
               setIsOpen(false);
             }}
-            className={`w-full flex items-center rounded-lg transition-all ${
+            className={`w-full flex items-center rounded-xl transition-all duration-200 ${
               isCollapsed ? 'justify-center p-2.5' : 'space-x-2.5 px-3 py-2.5 text-[11px] font-bold'
             } ${
               activeTab === 'bases'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white hover:translate-x-0.5'
             }`}
             title="Gestão de Bases"
           >
@@ -170,12 +170,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               setActiveTab('metas');
               setIsOpen(false);
             }}
-            className={`w-full flex items-center rounded-lg transition-all ${
+            className={`w-full flex items-center rounded-xl transition-all duration-200 ${
               isCollapsed ? 'justify-center p-2.5' : 'space-x-2.5 px-3 py-2.5 text-[11px] font-bold'
             } ${
               activeTab === 'metas'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white hover:translate-x-0.5'
             }`}
             title="Metas"
           >
@@ -188,12 +188,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               setActiveTab('notificacoes');
               setIsOpen(false);
             }}
-            className={`w-full flex items-center rounded-lg transition-all ${
+            className={`w-full flex items-center rounded-xl transition-all duration-200 ${
               isCollapsed ? 'justify-center p-2.5 relative' : 'space-x-2.5 px-3 py-2.5 text-[11px] font-bold justify-between'
             } ${
               activeTab === 'notificacoes'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white hover:translate-x-0.5'
             }`}
             title="Notificações"
           >
@@ -216,12 +216,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               setActiveTab('asaas');
               setIsOpen(false);
             }}
-            className={`w-full flex items-center rounded-lg transition-all ${
+            className={`w-full flex items-center rounded-xl transition-all duration-200 ${
               isCollapsed ? 'justify-center p-2.5' : 'space-x-2.5 px-3 py-2.5 text-[11px] font-bold'
             } ${
               activeTab === 'asaas'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-lg shadow-emerald-600/20'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white hover:translate-x-0.5'
             }`}
             title="Conta ASAAS"
           >
@@ -234,12 +234,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               setActiveTab('relatorios');
               setIsOpen(false);
             }}
-            className={`w-full flex items-center rounded-lg transition-all ${
+            className={`w-full flex items-center rounded-xl transition-all duration-200 ${
               isCollapsed ? 'justify-center p-2.5' : 'space-x-2.5 px-3 py-2.5 text-[11px] font-bold'
             } ${
               activeTab === 'relatorios'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white hover:translate-x-0.5'
             }`}
             title="Relatórios Personalizados"
           >
@@ -253,12 +253,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 setActiveTab('usuarios');
                 setIsOpen(false);
               }}
-              className={`w-full flex items-center rounded-lg transition-all ${
+              className={`w-full flex items-center rounded-xl transition-all duration-200 ${
                 isCollapsed ? 'justify-center p-2.5' : 'space-x-2.5 px-3 py-2.5 text-[11px] font-bold'
               } ${
                 activeTab === 'usuarios'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20'
+                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white hover:translate-x-0.5'
               }`}
               title="Usuários"
             >
@@ -269,10 +269,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
 
         {/* User Footer - Compact */}
-        <div className={`p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/30 flex flex-col space-y-3`}>
+        <div className={`p-3 border-t border-slate-200/60 dark:border-slate-800/40 bg-gradient-to-t from-slate-100/80 to-slate-50/40 dark:from-slate-950/60 dark:to-slate-900/30 flex flex-col space-y-3`}>
           {!isCollapsed && currentUser && (
             <div className="flex items-center space-x-2.5 px-1">
-              <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-black text-white shrink-0">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-[10px] font-black text-white shrink-0 ring-2 ring-blue-400/20 ring-offset-1 ring-offset-white dark:ring-offset-slate-900">
                 {currentUser.name
                   .split(' ')
                   .filter(Boolean)
@@ -290,8 +290,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           
           <button 
             onClick={onLogout}
-            className={`w-full flex items-center rounded-lg transition-all uppercase tracking-widest ${
-              isCollapsed ? 'justify-center p-2.5' : 'space-x-2.5 px-3 py-2 text-[11px] font-black text-rose-500 hover:bg-rose-500/10 border border-rose-500/20'
+            className={`w-full flex items-center rounded-xl transition-all duration-200 uppercase tracking-widest ${
+              isCollapsed ? 'justify-center p-2.5 text-rose-500 hover:bg-rose-500/10' : 'space-x-2.5 px-3 py-2 text-[11px] font-black text-rose-500 hover:bg-rose-500/10 border border-rose-500/15 hover:border-rose-500/30'
             }`}
             title="Sair"
           >

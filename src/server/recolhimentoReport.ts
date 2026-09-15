@@ -719,15 +719,34 @@ export async function generateRecolhimentoReportPdfWithBrowser(
     // silenciosamente pra páginas abertas via `newPage()`.
     await page.setViewport(PRINT_VIEWPORT);
     await page.setContent(html, { waitUntil: "load" });
-    // format+landscape (o que o código tinha antes) faz o Puppeteer calcular
-    // o tamanho da página sozinho em polegadas e converter — no Chromium
-    // "headless shell" do @sparticuz/chromium (produção/Vercel) isso saiu
-    // com uma folha maior que os 297x210mm do `.cover`, sobrando margem
-    // preenchida com a cor de fundo (`--paper`) em vez do conteúdo. Com
-    // preferCSSPageSize a página vem direto da regra `@page` do CSS acima —
-    // exatamente o mesmo valor usado no `.cover`, sem conversão duplicada.
+
+    // Diagnóstico: já tentamos {format:"A4", landscape:true} e depois
+    // preferCSSPageSize, e as duas vezes a página saiu maior que o `.cover`
+    // em produção (Vercel/@sparticuz/chromium), sobrando fundo — sem
+    // reproduzir local. Loga o tamanho real do documento renderizado pra,
+    // se acontecer de novo, dar pra ver nos logs da Vercel o que essa
+    // versão específica do Chromium está calculando, em vez de adivinhar.
+    const measured = await page.evaluate(() => {
+      const rect = document.querySelector(".cover")?.getBoundingClientRect();
+      return {
+        scrollWidth: document.documentElement.scrollWidth,
+        scrollHeight: document.documentElement.scrollHeight,
+        coverRect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        devicePixelRatio: window.devicePixelRatio,
+      };
+    });
+    console.log("[recolhimentoReport] documento renderizado:", JSON.stringify(measured));
+
+    // Tamanho explícito em vez de format/landscape (deixa o Puppeteer
+    // calcular em polegadas) ou preferCSSPageSize (lê do `@page` do CSS) —
+    // as duas opções saíram maiores que o pretendido nesse ambiente. Isso
+    // aqui é o jeito mais direto/primitivo da API, sem tabela de conversão
+    // nem parsing de CSS no meio.
     const pdf = await page.pdf({
-      preferCSSPageSize: true,
+      width: "297mm",
+      height: "210mm",
       printBackground: true,
       margin: { top: "0", bottom: "0", left: "0", right: "0" },
     });
