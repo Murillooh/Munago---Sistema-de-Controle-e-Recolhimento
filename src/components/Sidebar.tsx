@@ -57,6 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
+  const [whatsappMessage, setWhatsappMessage] = useState('Olá! Preciso de suporte no sistema Munago.');
 
   return (
     <>
@@ -378,20 +379,47 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </div>
                 </a>
 
-                <a
-                  href={`https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent('Olá! Preciso de suporte no sistema Munago.')}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center space-x-3 p-4 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl transition-colors group"
-                >
-                  <div className="p-2.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl group-hover:scale-105 transition-transform">
-                    <MessageCircle className="w-4 h-4" />
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-3">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl shrink-0">
+                      <MessageCircle className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-black text-slate-900 dark:text-slate-100">Mensagem no WhatsApp</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{SUPPORT_WHATSAPP_DISPLAY}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-black text-slate-900 dark:text-slate-100">Mensagem no WhatsApp</p>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{SUPPORT_WHATSAPP_DISPLAY}</p>
-                  </div>
-                </a>
+
+                  <textarea
+                    value={whatsappMessage}
+                    onChange={(e) => setWhatsappMessage(e.target.value)}
+                    rows={3}
+                    placeholder="Escreva sua mensagem..."
+                    className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 outline-none resize-none placeholder-slate-400"
+                  />
+
+                  <a
+                    href={
+                      whatsappMessage.trim()
+                        ? `https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(whatsappMessage)}`
+                        : undefined
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-disabled={!whatsappMessage.trim()}
+                    onClick={(e) => {
+                      if (!whatsappMessage.trim()) e.preventDefault();
+                    }}
+                    className={`flex items-center justify-center space-x-2 w-full py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-colors ${
+                      whatsappMessage.trim()
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>Enviar no WhatsApp</span>
+                  </a>
+                </div>
               </div>
             </motion.div>
           </div>
