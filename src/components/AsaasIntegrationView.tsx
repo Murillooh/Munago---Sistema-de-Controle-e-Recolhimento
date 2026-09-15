@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { RecolhimentoItem, Unidade } from '../types';
 import {
   CreditCard,
@@ -21,6 +21,7 @@ import {
   Phone,
   MapPin,
   Clock,
+  XCircle,
 } from 'lucide-react';
 import { findUnidadeForItem, ASAAS_AUTO_IMPORT_INTERVAL_MS } from '../utils/unidades';
 
@@ -124,6 +125,16 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   }, []);
   const importCountdownLabel = `${Math.floor(secondsUntilImportCheck / 60)}:${String(secondsUntilImportCheck % 60).padStart(2, '0')}`;
 
+  // Notificação in-app no lugar do alert() nativo do navegador (feio, trava
+  // a tela, corta mensagem longa) — usada pros erros de geração de cobrança.
+  const [notice, setNotice] = useState<{ type: 'error' | 'success'; title: string; lines: string[] } | null>(null);
+  const noticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showNotice = (type: 'error' | 'success', title: string, lines: string[] = []) => {
+    if (noticeTimeoutRef.current) clearTimeout(noticeTimeoutRef.current);
+    setNotice({ type, title, lines });
+    noticeTimeoutRef.current = setTimeout(() => setNotice(null), 8000);
+  };
+
   // Conjunto em vez de um id só — geração em lote dispara várias ao mesmo
   // tempo, cada botão precisa saber só se A SUA cobrança está em andamento.
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
@@ -186,7 +197,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
 
   const handleGenerateCharge = async (item: RecolhimentoItem) => {
     const result = await generateCharge(item);
-    if (result.ok === false) alert('Erro ao gerar cobrança no ASAAS: ' + result.error);
+    if (result.ok === false) showNotice('error', 'Erro ao gerar cobrança no ASAAS', [result.error]);
   };
 
   // Cobrança avulsa: igual criar uma cobrança nova direto dentro do ASAAS
@@ -319,7 +330,10 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
             : undefined,
       });
       if (result.ok === false) {
-        alert(`Lançamento adicionado à Planilha, mas a cobrança falhou: ${result.error}\n\nPode tentar gerar de novo na lista abaixo.`);
+        showNotice('error', 'Lançamento adicionado, mas a cobrança falhou', [
+          result.error,
+          'Pode tentar gerar de novo na lista abaixo.',
+        ]);
         setShowAdHocModal(false);
       } else {
         setAdHocResult({ invoiceUrl: result.invoiceUrl });
@@ -338,12 +352,21 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   // padrão, sem poluir com franquias já pagas). Com busca, procura em TODOS
   // os status — sem isso não dava pra achar uma franquia já confirmada ou
   // atrasada só pra conferir/gerar uma cobrança pra ela.
+  // Busca global: qualquer campo visível no card bate — franquia, CNPJ,
+  // C.Custo, status, competência ou vencimento. Antes só achava por
+  // franquia/CNPJ; com 300+ lançamentos, procurar por "CANINDÉ" ou
+  // "atrasado" ou "ago/26" direto é bem mais rápido que rolar a lista.
   const filteredPendingItems = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return pendingItems;
-    return items.filter(
-      (i) => i.franquia.toLowerCase().includes(q) || onlyDigits(i.cnpj).includes(onlyDigits(q))
-    );
+    const qDigits = onlyDigits(q);
+    return items.filter((i) => {
+      if (i.franquia.toLowerCase().includes(q)) return true;
+      if (qDigits && onlyDigits(i.cnpj).includes(qDigits)) return true;
+      return [i.cCusto, i.status, i.competenciaRecolhimento, i.competenciaPagamento, i.vencimento, i.descricao]
+        .filter(Boolean)
+        .some((field) => field.toLowerCase().includes(q));
+    });
   }, [items, pendingItems, search]);
 
   // Só entra na seleção/lote quem realmente pode ser gerado agora — item já
@@ -375,7 +398,13 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
       const failures = results.filter((r): r is { ok: false; error: string } => !r.ok);
       setSelectedIds(new Set());
       if (failures.length > 0) {
-        alert(`${targets.length - failures.length} de ${targets.length} cobranças geradas.\n\nFalhas:\n${failures.map((f) => f.error).join('\n')}`);
+        showNotice(
+          'error',
+          `${targets.length - failures.length} de ${targets.length} cobranças geradas`,
+          failures.map((f) => f.error)
+        );
+      } else {
+        showNotice('success', `${targets.length} cobrança${targets.length > 1 ? 's' : ''} gerada${targets.length > 1 ? 's' : ''} com sucesso`);
       }
     } finally {
       setBulkGenerating(false);
@@ -384,6 +413,38 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
 
   return (
     <div className="w-full space-y-6 pb-12">
+      {notice && (
+        <div className="fixed top-6 right-6 z-[200] w-full max-w-sm animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className={`rounded-2xl shadow-2xl border p-4 flex items-start gap-3 ${
+            notice.type === 'error'
+              ? 'bg-rose-50 dark:bg-rose-950/90 border-rose-200 dark:border-rose-800/50 text-rose-800 dark:text-rose-200'
+              : 'bg-emerald-50 dark:bg-emerald-950/90 border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-200'
+          }`}>
+            {notice.type === 'error' ? (
+              <XCircle className="w-5 h-5 shrink-0 text-rose-500" />
+            ) : (
+              <ShieldCheck className="w-5 h-5 shrink-0 text-emerald-500" />
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold leading-snug">{notice.title}</p>
+              {notice.lines.length > 0 && (
+                <ul className="mt-1.5 space-y-1">
+                  {notice.lines.map((line, idx) => (
+                    <li key={idx} className="text-xs leading-relaxed opacity-90">{line}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <button
+              onClick={() => setNotice(null)}
+              className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -467,7 +528,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por franquia ou CNPJ (qualquer status)..."
+                placeholder="Buscar por franquia, CNPJ, C.Custo, status, competência ou vencimento..."
                 className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 outline-none"
               />
             </div>
