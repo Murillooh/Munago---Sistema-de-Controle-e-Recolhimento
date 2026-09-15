@@ -1000,6 +1000,11 @@ export async function createApp() {
     }
   }
 
+  // Reaproveita o mesmo mapa do webhook (ASAAS_STATUS_MAP, acima) — status do
+  // ASAAS pro status do Munago, usado tanto na consulta de status de uma
+  // cobrança quanto na listagem/importação de cobranças.
+  const mapAsaasStatus = (asaasStatus: string): string => ASAAS_STATUS_MAP[asaasStatus] || 'Aguardando pagamento';
+
   // Busca um cliente já cadastrado no ASAAS pelo CNPJ, pra pré-preencher a
   // Cobrança Avulsa com o que já existe lá (e-mail, telefone, endereço) —
   // sem isso o boleto sai só com nome+CNPJ e pode faltar dado que o ASAAS
@@ -1110,14 +1115,26 @@ export async function createApp() {
         customerId = (await customerRes.json()).id;
       }
 
-      // Create Payment (Cobrança)
-      const paymentPayload = {
+      // Create Payment (Cobrança). Juros/multa/desconto só entram quando o
+      // front manda valor > 0 — do contrário o ASAAS aplica os padrões da
+      // conta (ou nenhum), então omitir o campo é o comportamento certo.
+      const paymentPayload: Record<string, any> = {
         customer: customerId,
         billingType: resolvedBillingType,
         value: chargeData.valor,
         dueDate: chargeData.vencimento ? chargeData.vencimento.split('/').reverse().join('-') : new Date().toISOString().split('T')[0],
         description: chargeData.descricao || 'Recolhimento de Franquia - LocGrupo',
       };
+      if (chargeData.externalReference) paymentPayload.externalReference = chargeData.externalReference;
+      if (chargeData.fine?.value > 0) paymentPayload.fine = { value: chargeData.fine.value, type: 'PERCENTAGE' };
+      if (chargeData.interest?.value > 0) paymentPayload.interest = { value: chargeData.interest.value };
+      if (chargeData.discount?.value > 0) {
+        paymentPayload.discount = {
+          value: chargeData.discount.value,
+          dueDateLimitDays: chargeData.discount.dueDateLimitDays || 0,
+          type: 'PERCENTAGE',
+        };
+      }
 
       const paymentRes = await fetch(`${baseUrl}/payments`, {
         method: 'POST',
@@ -1167,17 +1184,9 @@ export async function createApp() {
 
       if (response.ok) {
         const data = await response.json();
-        // ASAAS statuses: RECEIVED, CONFIRMED, OVERDUE, PENDING, RECEIVED_IN_CASH
-        let mappedStatus = 'Aguardando pagamento';
-        if (data.status === 'RECEIVED' || data.status === 'RECEIVED_IN_CASH' || data.status === 'CONFIRMED') {
-          mappedStatus = 'Recebida';
-        } else if (data.status === 'OVERDUE') {
-          mappedStatus = 'Atrasado';
-        }
-
         return res.json({
           success: true,
-          status: mappedStatus,
+          status: mapAsaasStatus(data.status),
           paymentDate: data.paymentDate,
           asaasStatus: data.status,
           invoiceUrl: data.invoiceUrl || data.bankSlipUrl,
@@ -1190,6 +1199,43 @@ export async function createApp() {
       // uma soneca de rede podia marcar uma cobrança pendente como paga sem
       // o pagamento ter acontecido de verdade. Agora só reporta a falha.
       return res.status(502).json({ error: 'Falha ao comunicar com a API do ASAAS: ' + err.message });
+    }
+  });
+
+  // Lista cobranças de uma conta ASAAS (por chave/unidade) — usado pra
+  // importar pro Munago cobranças lançadas direto no painel do ASAAS, sem
+  // ter passado pelo botão "Gerar no ASAAS" daqui. O cliente (App.tsx) decide
+  // o que já existe (por asaasId) e o que é novo; aqui só devolve a lista
+  // crua, já com status traduzido pro padrão do Munago.
+  app.post('/api/asaas/list-payments', async (req, res) => {
+    const { apiKey, sandbox } = req.body || {};
+    if (!apiKey) return res.status(400).json({ error: 'Chave API ASAAS obrigatória.' });
+
+    const baseUrl = sandbox ? 'https://sandbox.asaas.com/v3' : 'https://api.asaas.com/v3';
+    try {
+      // limit=100 é o máximo por página da API do ASAAS. Sem paginação por
+      // enquanto — suficiente pra pegar cobranças recém-lançadas; histórico
+      // muito antigo pode não entrar na primeira leva.
+      const response = await fetch(`${baseUrl}/payments?limit=100`, {
+        headers: { 'access_token': apiKey, 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) {
+        const error = await readAsaasError(response, 'Falha ao listar cobranças no ASAAS.');
+        return res.status(response.status).json({ error });
+      }
+      const data = await response.json();
+      const payments = (Array.isArray(data.data) ? data.data : []).map((p: any) => ({
+        id: p.id,
+        value: p.value,
+        dueDate: p.dueDate,
+        description: p.description || '',
+        status: mapAsaasStatus(p.status),
+        invoiceUrl: p.invoiceUrl || p.bankSlipUrl,
+        paymentDate: p.paymentDate,
+      }));
+      res.json({ success: true, payments });
+    } catch (err: any) {
+      res.status(502).json({ error: 'Falha ao comunicar com a API do ASAAS: ' + err.message });
     }
   });
 

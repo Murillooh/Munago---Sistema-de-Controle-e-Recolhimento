@@ -468,6 +468,88 @@ export default function App() {
     }).catch(() => {});
   };
 
+  // Sempre acessível de dentro do polling abaixo sem precisar recriar o
+  // intervalo a cada mudança de `items` (que muda o tempo todo — cada
+  // importação alimenta o próprio `items`).
+  const itemsRef = React.useRef(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  const MONTHS_PT_ASAAS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+  // Cobranças lançadas direto no painel do ASAAS (sem passar pelo botão
+  // "Gerar no ASAAS" daqui) não tinham como entrar no Munago — o sistema só
+  // conferia status de cobranças que ELE MESMO criou. Isso varre, pra cada
+  // unidade com chave configurada, a lista de cobranças da conta ASAAS e
+  // cria um lançamento novo pra qualquer uma que ainda não exista aqui
+  // (checado pelo asaasId). Sem revisão manual — pedido assim de propósito.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+
+    const importNewAsaasCharges = async () => {
+      const unidadesComChave = unidades.filter((u: any) => u.asaasApiKey);
+      if (unidadesComChave.length === 0) return;
+
+      for (const unidade of unidadesComChave) {
+        if (cancelled) return;
+        try {
+          const res = await fetch('/api/asaas/list-payments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ apiKey: unidade.asaasApiKey, sandbox: false }),
+          });
+          if (!res.ok) continue;
+          const data = await res.json();
+          const payments = Array.isArray(data.payments) ? data.payments : [];
+
+          const existingAsaasIds = new Set(itemsRef.current.filter((i) => i.asaasId).map((i) => i.asaasId));
+          for (const p of payments) {
+            if (cancelled || existingAsaasIds.has(p.id)) continue;
+
+            const [y, m, d] = String(p.dueDate || '').split('-');
+            const vencimento = d && m && y ? `${d}/${m}/${y}` : '';
+            const dueDate = p.dueDate ? new Date(`${p.dueDate}T00:00:00`) : null;
+            const competencia = dueDate && !isNaN(dueDate.getTime())
+              ? `${MONTHS_PT_ASAAS[dueDate.getMonth()]}/${String(dueDate.getFullYear()).slice(-2)}`
+              : '';
+
+            const newItem: RecolhimentoItem = {
+              id: `asaas-${p.id}`,
+              franquia: unidade.nome,
+              cnpj: unidade.cnpj || '',
+              cCusto: unidade.cCustoPadrao || unidade.nome,
+              dataCriacao: new Date().toLocaleDateString('pt-BR'),
+              vencimento,
+              vencimentoOriginal: vencimento,
+              dataPagamento: p.paymentDate ? p.paymentDate.split('-').reverse().join('/') : '',
+              valor: Number(p.value) || 0,
+              status: p.status || 'Aguardando pagamento',
+              competenciaRecolhimento: competencia,
+              competenciaPagamento: '',
+              descricao: p.description || `Cobrança importada do ASAAS (${unidade.nome})`,
+              asaasId: p.id,
+              asaasInvoiceUrl: p.invoiceUrl || undefined,
+            };
+            handleAddItem(newItem);
+            existingAsaasIds.add(p.id);
+          }
+        } catch {
+          // Chave com problema momentâneo ou API fora do ar — tenta de novo no próximo ciclo.
+        }
+      }
+    };
+
+    importNewAsaasCharges();
+    const interval = setInterval(importNewAsaasCharges, 90000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, unidades]);
+
   // Modal de confirmação genérico (substitui confirm() nativo) — quem quiser
   // confirmar algo só passa a mensagem e o que fazer se o usuário confirmar.
   const [confirmState, setConfirmState] = useState<{ message: string; onConfirm: () => void } | null>(null);

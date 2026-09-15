@@ -13,6 +13,13 @@ import {
   Zap,
   Plus,
   X,
+  ChevronLeft,
+  ChevronRight,
+  Percent,
+  Tag,
+  Mail,
+  Phone,
+  MapPin,
 } from 'lucide-react';
 import { findUnidadeForItem } from '../utils/unidades';
 
@@ -58,7 +65,31 @@ const competenciaFromIso = (iso: string) => {
   return isNaN(d.getTime()) ? '' : `${MONTHS_PT[d.getMonth()]}/${String(d.getFullYear()).slice(-2)}`;
 };
 
-const EMPTY_AD_HOC_FORM = { unidadeId: '', valor: '', vencimento: '', descricao: '', cCusto: '' };
+const EMPTY_AD_HOC_FORM = {
+  unidadeId: '',
+  // Cliente — pré-preenchido pela busca no ASAAS (customerLookup) quando já existe cadastro.
+  email: '',
+  phone: '',
+  postalCode: '',
+  address: '',
+  addressNumber: '',
+  complement: '',
+  province: '',
+  // Cobrança
+  valor: '',
+  vencimento: '',
+  descricao: '',
+  cCusto: '',
+  externalReference: '',
+  billingType: 'UNDEFINED' as AsaasBillingType,
+  jurosAtivo: false,
+  jurosPercent: '1',
+  multaAtiva: false,
+  multaPercent: '2',
+  descontoAtivo: false,
+  descontoValor: '',
+  descontoDias: '3',
+};
 
 export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ items, unidades, onUpdateItem, onAddItem }) => {
   // Antes existia toggle Sandbox/Produção — pedido explícito do usuário pra
@@ -95,7 +126,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   // interromper tudo no primeiro alert() como fazia o botão individual.
   const generateCharge = async (
     item: RecolhimentoItem,
-    customerExtra?: Partial<AsaasCustomerInfo>
+    extra?: Partial<AsaasCustomerInfo> & { billingType?: AsaasBillingType; externalReference?: string; fine?: { value: number }; interest?: { value: number }; discount?: { value: number; dueDateLimitDays: number } }
   ): Promise<{ ok: true; invoiceUrl?: string } | { ok: false; error: string }> => {
     const unidade = findUnidade(item);
     const apiKey = unidade?.asaasApiKey;
@@ -108,7 +139,12 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
       const res = await fetch('/api/asaas/create-charge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey, sandbox, billingType, chargeData: { ...item, ...customerExtra } }),
+        body: JSON.stringify({
+          apiKey,
+          sandbox,
+          billingType: extra?.billingType || billingType,
+          chargeData: { ...item, ...extra },
+        }),
       });
       const data = await res.json();
       if (data.success) {
@@ -142,6 +178,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   // (escolhe o cliente, preenche valor/vencimento/descrição, gera) — sem
   // precisar já existir um lançamento pendente na Planilha antes.
   const [showAdHocModal, setShowAdHocModal] = useState(false);
+  const [adHocStep, setAdHocStep] = useState<'cliente' | 'cobranca'>('cliente');
   const [adHocForm, setAdHocForm] = useState(EMPTY_AD_HOC_FORM);
   const [adHocGenerating, setAdHocGenerating] = useState(false);
   // Cadastro do cliente já existente no ASAAS pra essa franquia (CNPJ) —
@@ -154,7 +191,8 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   const [adHocResult, setAdHocResult] = useState<{ invoiceUrl?: string } | null>(null);
 
   const openAdHocModal = () => {
-    setAdHocForm(EMPTY_AD_HOC_FORM);
+    setAdHocForm({ ...EMPTY_AD_HOC_FORM, billingType });
+    setAdHocStep('cliente');
     setCustomerLookup({ status: 'idle' });
     setAdHocResult(null);
     setShowAdHocModal(true);
@@ -164,7 +202,20 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
 
   const handleAdHocUnidadeChange = async (unidadeId: string) => {
     const u = unidades.find((x) => x.id === unidadeId);
-    setAdHocForm((prev) => ({ ...prev, unidadeId, cCusto: u?.cCustoPadrao || prev.cCusto }));
+    setAdHocForm((prev) => ({
+      ...prev,
+      unidadeId,
+      cCusto: u?.cCustoPadrao || prev.cCusto,
+      // Limpa o que veio da franquia anterior — não faz sentido carregar
+      // e-mail/endereço de outro cliente pra essa seleção nova.
+      email: '',
+      phone: '',
+      postalCode: '',
+      address: '',
+      addressNumber: '',
+      complement: '',
+      province: '',
+    }));
     setAdHocResult(null);
 
     if (!u?.asaasApiKey || !u.cnpj) {
@@ -183,7 +234,23 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
         setCustomerLookup({ status: 'error', error: data.error || 'Falha ao consultar cliente no ASAAS.' });
         return;
       }
-      setCustomerLookup(data.found ? { status: 'found', customer: data.customer } : { status: 'not-found' });
+      if (data.found) {
+        setCustomerLookup({ status: 'found', customer: data.customer });
+        // Pré-preenche com o que já existe no ASAAS — o objetivo de puxar o
+        // cadastro é justamente não deixar faltar nada na hora de gerar.
+        setAdHocForm((prev) => ({
+          ...prev,
+          email: data.customer.email || '',
+          phone: data.customer.mobilePhone || data.customer.phone || '',
+          postalCode: data.customer.postalCode || '',
+          address: data.customer.address || '',
+          addressNumber: data.customer.addressNumber || '',
+          complement: data.customer.complement || '',
+          province: data.customer.province || '',
+        }));
+      } else {
+        setCustomerLookup({ status: 'not-found' });
+      }
     } catch {
       setCustomerLookup({ status: 'error', error: 'Falha ao comunicar com a API do ASAAS.' });
     }
@@ -215,10 +282,27 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
     setAdHocGenerating(true);
     try {
       onAddItem(newItem);
-      // O servidor já busca o cliente por CNPJ e reaproveita e-mail/telefone/
-      // endereço cadastrados no ASAAS (ver customerLookup só pra mostrar isso
-      // aqui antes de gerar) — só cria cliente novo se realmente não existir.
-      const result = await generateCharge(newItem);
+      // O servidor já busca o cliente por CNPJ e reaproveita cadastro
+      // existente no ASAAS; os campos de contato abaixo só são usados de
+      // verdade quando o cliente ainda não existe lá (customerLookup
+      // 'not-found') — é o que garante que a criação não saia faltando nada.
+      const result = await generateCharge(newItem, {
+        email: adHocForm.email || undefined,
+        phone: adHocForm.phone || undefined,
+        postalCode: adHocForm.postalCode || undefined,
+        address: adHocForm.address || undefined,
+        addressNumber: adHocForm.addressNumber || undefined,
+        complement: adHocForm.complement || undefined,
+        province: adHocForm.province || undefined,
+        billingType: adHocForm.billingType,
+        externalReference: adHocForm.externalReference || undefined,
+        fine: adHocForm.multaAtiva && Number(adHocForm.multaPercent) > 0 ? { value: Number(adHocForm.multaPercent) } : undefined,
+        interest: adHocForm.jurosAtivo && Number(adHocForm.jurosPercent) > 0 ? { value: Number(adHocForm.jurosPercent) } : undefined,
+        discount:
+          adHocForm.descontoAtivo && Number(adHocForm.descontoValor) > 0
+            ? { value: Number(adHocForm.descontoValor), dueDateLimitDays: Number(adHocForm.descontoDias) || 0 }
+            : undefined,
+      });
       if (result.ok === false) {
         alert(`Lançamento adicionado à Planilha, mas a cobrança falhou: ${result.error}\n\nPode tentar gerar de novo na lista abaixo.`);
         setShowAdHocModal(false);
@@ -512,19 +596,38 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
 
       {showAdHocModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
-              <div>
-                <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight">Nova Cobrança Avulsa</h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Cria o lançamento na Planilha e gera a cobrança no ASAAS na hora.</p>
+          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 shrink-0">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight">Nova Cobrança Avulsa</h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Cria o lançamento na Planilha e gera a cobrança no ASAAS na hora — igual criar direto no ASAAS.</p>
+                </div>
+                <button onClick={() => setShowAdHocModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors shrink-0">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button onClick={() => setShowAdHocModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors shrink-0">
-                <X className="w-5 h-5" />
-              </button>
+
+              {!adHocResult && (
+                <div className="flex items-center gap-2 mt-4">
+                  {([['cliente', '1. Cliente'], ['cobranca', '2. Cobrança']] as const).map(([step, label]) => (
+                    <div
+                      key={step}
+                      className={`flex-1 h-1.5 rounded-full transition-colors ${
+                        adHocStep === step || (step === 'cliente' && adHocStep === 'cobranca')
+                          ? 'bg-emerald-500'
+                          : 'bg-slate-200 dark:bg-slate-700'
+                      }`}
+                      title={label}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
+            <div className="p-6 space-y-4 overflow-y-auto">
             {adHocResult ? (
-              <div className="p-6 space-y-4">
+              <>
                 <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 rounded-xl flex items-start gap-3">
                   <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                   <div>
@@ -554,128 +657,366 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                 >
                   Concluir
                 </button>
-              </div>
-            ) : (
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Franquia (Unidade)</label>
-                <select
-                  value={adHocForm.unidadeId}
-                  onChange={(e) => handleAdHocUnidadeChange(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
-                >
-                  <option value="">Selecione a franquia...</option>
-                  {unidades.map((u) => (
-                    <option key={u.id} value={u.id}>{u.nome}</option>
-                  ))}
-                </select>
-                {adHocUnidade && (
-                  <p className="text-[10px] text-slate-400 mt-1 font-mono">{adHocUnidade.cnpj || 'sem CNPJ cadastrado'}</p>
-                )}
-                {adHocUnidade && !adHocUnidade.asaasApiKey && (
-                  <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-1">Sem chave ASAAS configurada para esta unidade (Bases &gt; Unidades).</p>
-                )}
+              </>
+            ) : adHocStep === 'cliente' ? (
+              <>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Franquia (Unidade)</label>
+                  <select
+                    value={adHocForm.unidadeId}
+                    onChange={(e) => handleAdHocUnidadeChange(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                  >
+                    <option value="">Selecione a franquia...</option>
+                    {unidades.map((u) => (
+                      <option key={u.id} value={u.id}>{u.nome}</option>
+                    ))}
+                  </select>
+                  {adHocUnidade && (
+                    <p className="text-[10px] text-slate-400 mt-1 font-mono">{adHocUnidade.cnpj || 'sem CNPJ cadastrado'}</p>
+                  )}
+                  {adHocUnidade && !adHocUnidade.asaasApiKey && (
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-1">Sem chave ASAAS configurada para esta unidade (Bases &gt; Unidades).</p>
+                  )}
 
-                {customerLookup.status === 'loading' && (
-                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500 font-semibold mt-2">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Consultando cadastro do cliente no ASAAS...</span>
-                  </div>
-                )}
-                {customerLookup.status === 'found' && (
-                  <div className="mt-2 p-2.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 rounded-xl text-[10px] text-emerald-800 dark:text-emerald-300 flex items-start gap-2">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-bold">Cliente já cadastrado no ASAAS — boleto sai com esses dados</p>
-                      <p className="mt-0.5 text-emerald-700/80 dark:text-emerald-400/80">
-                        {customerLookup.customer.email || 'sem e-mail'} • {customerLookup.customer.mobilePhone || customerLookup.customer.phone || 'sem telefone'} •{' '}
-                        {customerLookup.customer.address
-                          ? `${customerLookup.customer.address}, ${customerLookup.customer.addressNumber || 's/n'}`
-                          : 'sem endereço cadastrado'}
-                      </p>
+                  {customerLookup.status === 'loading' && (
+                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500 font-semibold mt-2">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>Consultando cadastro do cliente no ASAAS...</span>
                     </div>
-                  </div>
-                )}
-                {customerLookup.status === 'not-found' && (
-                  <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400 font-bold">
-                    <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                    <span>Nenhum cadastro encontrado — um cliente novo será criado no ASAAS só com nome e CNPJ.</span>
-                  </div>
-                )}
-                {customerLookup.status === 'error' && (
-                  <div className="mt-2 flex items-center gap-1.5 text-[10px] text-rose-600 dark:text-rose-400 font-bold">
-                    <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                    <span>{customerLookup.error}</span>
-                  </div>
-                )}
-              </div>
+                  )}
+                  {customerLookup.status === 'found' && (
+                    <div className="mt-2 p-2.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 rounded-xl text-[10px] text-emerald-800 dark:text-emerald-300 flex items-start gap-2">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                      <p className="font-bold">Cliente já cadastrado no ASAAS — dados abaixo vieram de lá. Pra mudar, edite direto no ASAAS.</p>
+                    </div>
+                  )}
+                  {customerLookup.status === 'not-found' && (
+                    <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400 font-bold">
+                      <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                      <span>Nenhum cadastro encontrado — preencha abaixo pra criar o cliente no ASAAS.</span>
+                    </div>
+                  )}
+                  {customerLookup.status === 'error' && (
+                    <div className="mt-2 flex items-center gap-1.5 text-[10px] text-rose-600 dark:text-rose-400 font-bold">
+                      <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                      <span>{customerLookup.error}</span>
+                    </div>
+                  )}
+                </div>
 
-              <div className="grid grid-cols-2 gap-3">
+                {(() => {
+                  const readOnly = customerLookup.status === 'found';
+                  const fieldsDisabled = !adHocUnidade || customerLookup.status === 'loading';
+                  const inputCls = `w-full pl-9 pr-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none disabled:opacity-50 ${readOnly ? 'text-slate-500 dark:text-slate-400' : ''}`;
+                  return (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">E-mail</label>
+                          <div className="relative">
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                            <input
+                              type="email"
+                              value={adHocForm.email}
+                              disabled={fieldsDisabled || readOnly}
+                              onChange={(e) => setAdHocForm({ ...adHocForm, email: e.target.value })}
+                              className={inputCls}
+                              placeholder="financeiro@franquia.com.br"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Telefone</label>
+                          <div className="relative">
+                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                            <input
+                              type="text"
+                              value={adHocForm.phone}
+                              disabled={fieldsDisabled || readOnly}
+                              onChange={(e) => setAdHocForm({ ...adHocForm, phone: e.target.value })}
+                              className={inputCls}
+                              placeholder="(00) 00000-0000"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">CEP</label>
+                          <div className="relative">
+                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                            <input
+                              type="text"
+                              value={adHocForm.postalCode}
+                              disabled={fieldsDisabled || readOnly}
+                              onChange={(e) => setAdHocForm({ ...adHocForm, postalCode: e.target.value })}
+                              className={inputCls}
+                              placeholder="00000-000"
+                            />
+                          </div>
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Bairro</label>
+                          <input
+                            type="text"
+                            value={adHocForm.province}
+                            disabled={fieldsDisabled || readOnly}
+                            onChange={(e) => setAdHocForm({ ...adHocForm, province: e.target.value })}
+                            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none disabled:opacity-50"
+                            placeholder="Ex: Centro"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="col-span-2">
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Endereço</label>
+                          <input
+                            type="text"
+                            value={adHocForm.address}
+                            disabled={fieldsDisabled || readOnly}
+                            onChange={(e) => setAdHocForm({ ...adHocForm, address: e.target.value })}
+                            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none disabled:opacity-50"
+                            placeholder="Ex: Rua das Franquias"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Número</label>
+                          <input
+                            type="text"
+                            value={adHocForm.addressNumber}
+                            disabled={fieldsDisabled || readOnly}
+                            onChange={(e) => setAdHocForm({ ...adHocForm, addressNumber: e.target.value })}
+                            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none disabled:opacity-50"
+                            placeholder="s/n"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Complemento</label>
+                        <input
+                          type="text"
+                          value={adHocForm.complement}
+                          disabled={fieldsDisabled || readOnly}
+                          onChange={(e) => setAdHocForm({ ...adHocForm, complement: e.target.value })}
+                          className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none disabled:opacity-50"
+                          placeholder="Sala, bloco, referência..."
+                        />
+                      </div>
+                    </>
+                  );
+                })()}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdHocModal(false)}
+                    className="flex-1 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold rounded-xl text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!adHocUnidade || !adHocUnidade.asaasApiKey || customerLookup.status === 'loading'}
+                    onClick={() => setAdHocStep('cobranca')}
+                    className="flex-1 px-4 py-2.5 bg-emerald-600 text-white font-black rounded-xl text-xs hover:bg-emerald-700 disabled:opacity-50 transition-all shadow-lg shadow-emerald-600/20 uppercase tracking-widest flex items-center justify-center space-x-2"
+                  >
+                    <span>Próximo: Cobrança</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Valor (R$)</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Tipo de cobrança</label>
+                  <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-fit">
+                    {BILLING_TYPE_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setAdHocForm({ ...adHocForm, billingType: opt.value })}
+                        className={`px-3.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
+                          adHocForm.billingType === opt.value
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Valor (R$)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={adHocForm.valor}
+                      onChange={(e) => setAdHocForm({ ...adHocForm, valor: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                      placeholder="0,00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Vencimento</label>
+                    <input
+                      type="date"
+                      value={adHocForm.vencimento}
+                      onChange={(e) => setAdHocForm({ ...adHocForm, vencimento: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">C. Custo</label>
+                    <input
+                      type="text"
+                      value={adHocForm.cCusto}
+                      onChange={(e) => setAdHocForm({ ...adHocForm, cCusto: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                      placeholder="Ex: CANINDÉ"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Referência externa</label>
+                    <input
+                      type="text"
+                      value={adHocForm.externalReference}
+                      onChange={(e) => setAdHocForm({ ...adHocForm, externalReference: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                      placeholder="Nº do pedido (opcional)"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Descrição</label>
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={adHocForm.valor}
-                    onChange={(e) => setAdHocForm({ ...adHocForm, valor: e.target.value })}
+                    type="text"
+                    value={adHocForm.descricao}
+                    onChange={(e) => setAdHocForm({ ...adHocForm, descricao: e.target.value })}
                     className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
-                    placeholder="0,00"
+                    placeholder="Ex: PAGAMENTO REF AO RECOLHIMENTO DE SETEMBRO 2026"
                   />
                 </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Vencimento</label>
-                  <input
-                    type="date"
-                    value={adHocForm.vencimento}
-                    onChange={(e) => setAdHocForm({ ...adHocForm, vencimento: e.target.value })}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
-                  />
+
+                {/* Juros e multa — opcional, igual a seção equivalente do ASAAS na criação de cobrança. */}
+                <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                  <label className="flex items-center justify-between gap-3 p-3.5 cursor-pointer bg-slate-50 dark:bg-slate-800/50">
+                    <span className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
+                      <Percent className="w-3.5 h-3.5 text-slate-400" />
+                      Juros e multa por atraso
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={adHocForm.jurosAtivo && adHocForm.multaAtiva}
+                      onChange={(e) => setAdHocForm({ ...adHocForm, jurosAtivo: e.target.checked, multaAtiva: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 shrink-0 bg-slate-300 dark:bg-slate-700 peer-checked:bg-emerald-600 rounded-full relative transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:bg-white after:rounded-full after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
+                  </label>
+                  {adHocForm.jurosAtivo && adHocForm.multaAtiva && (
+                    <div className="grid grid-cols-2 gap-3 p-3.5 border-t border-slate-200 dark:border-slate-700">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Multa (%)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={adHocForm.multaPercent}
+                          onChange={(e) => setAdHocForm({ ...adHocForm, multaPercent: e.target.value })}
+                          className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Juros ao mês (%)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={adHocForm.jurosPercent}
+                          onChange={(e) => setAdHocForm({ ...adHocForm, jurosPercent: e.target.value })}
+                          className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">C. Custo</label>
-                <input
-                  type="text"
-                  value={adHocForm.cCusto}
-                  onChange={(e) => setAdHocForm({ ...adHocForm, cCusto: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
-                  placeholder="Ex: CANINDÉ"
-                />
-              </div>
+                {/* Desconto por antecipação — opcional. */}
+                <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                  <label className="flex items-center justify-between gap-3 p-3.5 cursor-pointer bg-slate-50 dark:bg-slate-800/50">
+                    <span className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
+                      <Tag className="w-3.5 h-3.5 text-slate-400" />
+                      Desconto por antecipação
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={adHocForm.descontoAtivo}
+                      onChange={(e) => setAdHocForm({ ...adHocForm, descontoAtivo: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 shrink-0 bg-slate-300 dark:bg-slate-700 peer-checked:bg-emerald-600 rounded-full relative transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:bg-white after:rounded-full after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
+                  </label>
+                  {adHocForm.descontoAtivo && (
+                    <div className="grid grid-cols-2 gap-3 p-3.5 border-t border-slate-200 dark:border-slate-700">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Desconto (%)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={adHocForm.descontoValor}
+                          onChange={(e) => setAdHocForm({ ...adHocForm, descontoValor: e.target.value })}
+                          className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Dias antes do vencimento</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={adHocForm.descontoDias}
+                          onChange={(e) => setAdHocForm({ ...adHocForm, descontoDias: e.target.value })}
+                          className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
 
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Descrição</label>
-                <input
-                  type="text"
-                  value={adHocForm.descricao}
-                  onChange={(e) => setAdHocForm({ ...adHocForm, descricao: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
-                  placeholder="Ex: PAGAMENTO REF AO RECOLHIMENTO DE SETEMBRO 2026"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAdHocModal(false)}
-                  className="flex-1 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold rounded-xl text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  disabled={adHocGenerating || !adHocUnidade || !adHocUnidade.asaasApiKey || !adHocForm.valor || !adHocForm.vencimento}
-                  onClick={handleGenerateAdHoc}
-                  className="flex-1 px-4 py-2.5 bg-emerald-600 text-white font-black rounded-xl text-xs hover:bg-emerald-700 disabled:opacity-50 transition-all shadow-lg shadow-emerald-600/20 uppercase tracking-widest flex items-center justify-center space-x-2"
-                >
-                  {adHocGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                  <span>{adHocGenerating ? 'Gerando...' : 'Gerar no ASAAS'}</span>
-                </button>
-              </div>
-            </div>
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setAdHocStep('cliente')}
+                    className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold rounded-xl text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-all flex items-center gap-1.5"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Voltar</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={adHocGenerating || !adHocForm.valor || !adHocForm.vencimento}
+                    onClick={handleGenerateAdHoc}
+                    className="flex-1 px-4 py-2.5 bg-emerald-600 text-white font-black rounded-xl text-xs hover:bg-emerald-700 disabled:opacity-50 transition-all shadow-lg shadow-emerald-600/20 uppercase tracking-widest flex items-center justify-center space-x-2"
+                  >
+                    {adHocGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    <span>{adHocGenerating ? 'Gerando...' : 'Gerar no ASAAS'}</span>
+                  </button>
+                </div>
+              </>
             )}
+            </div>
           </div>
         </div>
       )}
