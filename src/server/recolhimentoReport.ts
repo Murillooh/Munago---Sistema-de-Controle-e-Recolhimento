@@ -643,14 +643,19 @@ function findLocalChrome(): string | null {
   return candidates.find((p) => existsSync(p)) ?? null;
 }
 
-// Sem isso, o viewport padrão do puppeteer-core é 800x600px — bem menor que
-// os 297mm (~1123px a 96dpi) da página em paisagem. Com o Chromium "shell"
-// do @sparticuz/chromium (usado na Vercel), isso fez o layout calcular a
-// largura de grid/flex com base nesse viewport pequeno, deixando a página
-// impressa com a capa encolhida num canto e o resto em branco — o Chrome
-// completo (usado no dev local) não tinha esse problema, então só apareceu
-// em produção. Um viewport maior que o conteúdo remove essa ambiguidade.
-const PRINT_VIEWPORT = { width: 1754, height: 1240 };
+// `mm` no CSS converte pra px numa razão FIXA de 96px/polegada — sempre,
+// não importa o viewport. `.cover` com 297mm x 210mm vira sempre
+// 1122.5 x 793.7 CSS px. O viewport tem que bater EXATAMENTE com isso:
+// se for maior (como os 1754x1240 que tinha aqui antes, escolhidos pra
+// tentar ficar "mais nítido"), o `.cover` — que tem largura própria fixa,
+// não estica pra preencher o body — fica plantado no canto de um viewport
+// maior, sobrando fundo à direita/embaixo exatamente na proporção
+// 1122.5/1754 ≈ 0,64. Isso bateu direto com o Chromium "shell" do
+// @sparticuz/chromium na Vercel; o Chrome completo do dev local mascarava
+// o mesmo descompasso, por isso nunca reproduziu aqui. Nitidez de
+// verdade vem de `deviceScaleFactor` (rasteriza em resolução maior sem
+// mudar o tamanho lógico do layout), não de inflar width/height.
+const PRINT_VIEWPORT = { width: 1123, height: 794, deviceScaleFactor: 2 };
 
 async function launchBrowser(): Promise<Browser> {
   const isServerless = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;

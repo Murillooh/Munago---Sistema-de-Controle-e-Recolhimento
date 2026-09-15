@@ -167,42 +167,51 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           </div>
         </div>
 
-        <form className="w-full max-w-[340px] bg-[rgba(17,16,20,0.72)] backdrop-blur-md border border-[#242229] rounded-2xl p-7 shadow-2xl space-y-4" onSubmit={handleSubmit}>
+        <form className="w-full max-w-[360px] bg-white/5 dark:bg-[#111014]/60 backdrop-blur-2xl border border-white/10 dark:border-[#242229]/60 rounded-3xl p-8 shadow-2xl shadow-black/50 space-y-5" onSubmit={handleSubmit}>
           {errorMsg && (
-            <div className="text-[11px] font-semibold text-rose-300 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2">
+            <div className="text-[11px] font-bold text-rose-300 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4" />
               {errorMsg}
             </div>
           )}
           {infoMsg && (
-            <div className="text-[11px] font-semibold text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+            <div className="text-[11px] font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4" />
               {infoMsg}
             </div>
           )}
 
           {mode === 'register' && (
             <div>
-              <label className="block text-[11px] font-semibold tracking-[0.5px] text-[#918f9a] mb-2">NOME</label>
-              <input required type="text" value={name} onChange={e => setName(e.target.value)} className="w-full h-[42px] rounded-lg bg-[rgba(255,255,255,0.03)] border border-[#242229] px-4 text-sm" />
+              <label className="block text-[10px] font-black tracking-widest text-[#918f9a] mb-2 uppercase">Nome</label>
+              <input required type="text" value={name} onChange={e => setName(e.target.value)} className="w-full h-11 rounded-xl bg-white/5 border border-white/10 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white placeholder-white/30" placeholder="Seu nome" />
             </div>
           )}
           <div>
-            <label className="block text-[11px] font-semibold tracking-[0.5px] text-[#918f9a] mb-2">E-MAIL</label>
-            <input required type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full h-[42px] rounded-lg bg-[rgba(255,255,255,0.03)] border border-[#242229] px-4 text-sm" />
+            <label className="block text-[10px] font-black tracking-widest text-[#918f9a] mb-2 uppercase">E-mail</label>
+            <input required type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full h-11 rounded-xl bg-white/5 border border-white/10 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white placeholder-white/30" placeholder="seu@email.com" />
           </div>
           <div>
-            <label className="block text-[11px] font-semibold tracking-[0.5px] text-[#918f9a] mb-2">SENHA</label>
-            <input required minLength={mode === 'register' ? 6 : undefined} type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full h-[42px] rounded-lg bg-[rgba(255,255,255,0.03)] border border-[#242229] px-4 text-sm" />
+            <label className="block text-[10px] font-black tracking-widest text-[#918f9a] mb-2 uppercase">Senha</label>
+            <input required minLength={mode === 'register' ? 6 : undefined} type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full h-11 rounded-xl bg-white/5 border border-white/10 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white placeholder-white/30" placeholder="••••••••" />
           </div>
-          <button type="submit" disabled={loading} className="w-full h-[44px] mt-2 rounded-lg bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] flex items-center justify-center font-bold text-[13px] text-white tracking-[0.5px] disabled:opacity-60">
-            {loading ? (mode === 'register' ? 'CRIANDO CONTA...' : 'ENTRANDO...') : (mode === 'register' ? 'CRIAR CONTA' : 'ENTRAR')}
-          </button>
-          <button
-            type="button"
-            onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setErrorMsg(''); setInfoMsg(''); }}
-            className="w-full h-[44px] rounded-lg border border-[#242229] flex items-center justify-center font-bold text-[13px] text-[#f5f5f0] tracking-[0.5px]"
-          >
-            {mode === 'login' ? 'CRIAR CONTA' : 'JÁ TENHO CONTA'}
-          </button>
+          
+          <div className="pt-2 space-y-3">
+            <button type="submit" disabled={loading} className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center justify-center font-black text-xs text-white tracking-wider disabled:opacity-60 hover:from-blue-500 hover:to-indigo-500 transition-all shadow-lg shadow-blue-500/25 active:scale-95 group relative overflow-hidden">
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
+              <span className="relative z-10 flex items-center gap-2">
+                {mode === 'login' ? <Lock className="w-3.5 h-3.5" /> : <Mail className="w-3.5 h-3.5" />}
+                {loading ? (mode === 'register' ? 'Criando Conta...' : 'Entrando...') : (mode === 'register' ? 'Criar Conta' : 'Entrar no Sistema')}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setErrorMsg(''); setInfoMsg(''); }}
+              className="w-full h-12 rounded-xl border border-white/10 flex items-center justify-center font-bold text-xs text-white/70 tracking-wider hover:bg-white/5 hover:text-white transition-all"
+            >
+              {mode === 'login' ? 'Criar Nova Conta' : 'Já Tenho Conta'}
+            </button>
+          </div>
         </form>
       </div>
 
