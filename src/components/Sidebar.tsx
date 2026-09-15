@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { ActiveTab, RecolhimentoItem, AuthUser } from '../types';
 import { MunagoLogo } from './MunagoLogo';
 import {
@@ -18,8 +19,19 @@ import {
   Database,
   FileBarChart,
   Users,
+  LifeBuoy,
+  Mail,
+  MessageCircle,
+  X,
 } from 'lucide-react';
 import { exportToExcel, exportToPDF } from '../utils/exportImport';
+
+// Contato de suporte — placeholders até o Murillo mandar o e-mail e o
+// WhatsApp de verdade. WhatsApp só com dígitos (DDI+DDD+número, sem
+// espaço/traço/parênteses), formato que o link wa.me espera.
+const SUPPORT_EMAIL = 'suporte@munago.com.br';
+const SUPPORT_WHATSAPP = '5511999999999';
+const SUPPORT_WHATSAPP_DISPLAY = '+55 11 99999-9999';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -45,6 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentUser,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
 
   return (
     <>
@@ -270,6 +283,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* User Footer - Compact */}
         <div className={`p-3 border-t border-slate-200/60 dark:border-slate-800/40 bg-gradient-to-t from-slate-100/80 to-slate-50/40 dark:from-slate-950/60 dark:to-slate-900/30 flex flex-col space-y-3`}>
+          <button
+            onClick={() => setShowSupportModal(true)}
+            className={`w-full flex items-center rounded-xl transition-all duration-200 ${
+              isCollapsed ? 'justify-center p-2.5' : 'space-x-2.5 px-3 py-2.5 text-[11px] font-bold'
+            } text-slate-500 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white`}
+            title="Suporte"
+          >
+            <LifeBuoy className="w-4 h-4" />
+            {!isCollapsed && <span>Suporte</span>}
+          </button>
+
           {!isCollapsed && currentUser && (
             <div className="flex items-center space-x-2.5 px-1">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-[10px] font-black text-white shrink-0 ring-2 ring-blue-400/20 ring-offset-1 ring-offset-white dark:ring-offset-slate-900">
@@ -301,6 +325,79 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
         </div>
       </aside>
+
+      {/* Modal de Suporte */}
+      <AnimatePresence>
+        {showSupportModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowSupportModal(false)}
+              className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
+            >
+              <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/20">
+                    <LifeBuoy className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900 dark:text-slate-100 tracking-tight">Suporte</h3>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-widest font-bold">Fale direto com o Murillo</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowSupportModal(false)}
+                  className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-3">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Precisa de uma atualização, achou um problema, ou quer suporte? Manda mensagem direto por um dos canais abaixo.
+                </p>
+
+                <a
+                  href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Suporte Munago')}`}
+                  className="flex items-center space-x-3 p-4 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl transition-colors group"
+                >
+                  <div className="p-2.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl group-hover:scale-105 transition-transform">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-black text-slate-900 dark:text-slate-100">Enviar e-mail</p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{SUPPORT_EMAIL}</p>
+                  </div>
+                </a>
+
+                <a
+                  href={`https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent('Olá! Preciso de suporte no sistema Munago.')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-3 p-4 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl transition-colors group"
+                >
+                  <div className="p-2.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl group-hover:scale-105 transition-transform">
+                    <MessageCircle className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-black text-slate-900 dark:text-slate-100">Mensagem no WhatsApp</p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{SUPPORT_WHATSAPP_DISPLAY}</p>
+                  </div>
+                </a>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   );
 };
