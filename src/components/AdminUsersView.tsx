@@ -1,6 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { ActiveTab, AuthUser, PERMISSION_TABS } from '../types';
-import { Users, ShieldCheck, ShieldX, ShieldAlert, Clock, RefreshCw, ShieldOff, Crown, KeyRound, Copy, Check, X, Trash2, SlidersHorizontal } from 'lucide-react';
+import { Users, ShieldCheck, ShieldX, ShieldAlert, Clock, RefreshCw, ShieldOff, Crown, KeyRound, Copy, Check, X, Trash2, SlidersHorizontal, FileSpreadsheet, Target, Boxes, FileBarChart, CreditCard, Database, Bell, LucideIcon } from 'lucide-react';
+
+// Mesmo ícone de cada aba na Sidebar — ajuda a reconhecer rápido o que cada
+// permissão libera sem precisar ler o nome todo.
+const PERMISSION_TAB_ICONS: Record<string, LucideIcon> = {
+  tabela: FileSpreadsheet,
+  metas: Target,
+  estoque: Boxes,
+  relatorios: FileBarChart,
+  asaas: CreditCard,
+  bases: Database,
+  notificacoes: Bell,
+};
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface AdminUsersViewProps {
@@ -417,10 +429,10 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ sessionToken, cu
       {permTarget && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setPermTarget(null)} />
-          <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+          <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
               <div className="flex items-center space-x-3 min-w-0">
-                <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-600/20 shrink-0">
+                <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-600/20 shrink-0">
                   <SlidersHorizontal className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
@@ -437,47 +449,79 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ sessionToken, cu
             </div>
 
             <div className="p-6 space-y-4">
-              <label className="flex items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer">
-                <div>
-                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100">Acesso total</p>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Libera todas as abas, inclusive as futuras.</p>
+              <label className="flex items-center justify-between gap-3 p-3.5 bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/40 dark:to-slate-800/60 border border-indigo-100 dark:border-indigo-900/40 rounded-xl cursor-pointer transition-colors hover:border-indigo-200 dark:hover:border-indigo-800">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="p-2 bg-indigo-600 text-white rounded-lg shrink-0">
+                    <Crown className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-100">Acesso total</p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">Libera todas as abas, inclusive as futuras.</p>
+                  </div>
                 </div>
                 <input
                   type="checkbox"
                   checked={permFullAccess}
                   onChange={(e) => setPermFullAccess(e.target.checked)}
-                  className="w-4 h-4 accent-indigo-600 shrink-0"
+                  className="sr-only peer"
                 />
+                <div className="w-9 h-5 shrink-0 bg-slate-300 dark:bg-slate-700 peer-checked:bg-indigo-600 rounded-full relative transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:bg-white after:rounded-full after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
               </label>
 
-              <div className={`space-y-1.5 max-h-64 overflow-y-auto pr-1 ${permFullAccess ? 'opacity-40 pointer-events-none' : ''}`}>
-                {PERMISSION_TABS.map((tab) => (
-                  <label
-                    key={tab.id}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={permFullAccess || permSelection.has(tab.id)}
-                      onChange={() => togglePermTab(tab.id)}
-                      className="w-4 h-4 accent-indigo-600"
-                    />
-                    {tab.label}
-                  </label>
-                ))}
+              <div>
+                <div className="flex items-center justify-between px-1 mb-1.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Abas liberadas</p>
+                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 tabular-nums">
+                    {permFullAccess ? PERMISSION_TABS.length : permSelection.size}/{PERMISSION_TABS.length}
+                  </p>
+                </div>
+                <div className={`space-y-1 max-h-64 overflow-y-auto pr-1 transition-opacity ${permFullAccess ? 'opacity-40 pointer-events-none' : ''}`}>
+                  {PERMISSION_TABS.map((tab) => {
+                    const Icon = PERMISSION_TAB_ICONS[tab.id] || SlidersHorizontal;
+                    const checked = permFullAccess || permSelection.has(tab.id);
+                    return (
+                      <label
+                        key={tab.id}
+                        className={`flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+                          checked
+                            ? 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-100 dark:border-indigo-900/40'
+                            : 'bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 dark:hover:border-slate-700'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          <Icon className={`w-4 h-4 ${checked ? 'text-indigo-500' : 'text-slate-400 dark:text-slate-500'}`} />
+                          {tab.label}
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => togglePermTab(tab.id)}
+                          className="sr-only"
+                        />
+                        <span
+                          className={`w-4 h-4 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors ${
+                            checked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 dark:border-slate-600'
+                          }`}
+                        >
+                          {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={() => setPermTarget(null)}
-                  className="flex-1 px-3 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all"
+                  className="flex-1 px-3 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all active:scale-[0.98]"
                 >
                   Cancelar
                 </button>
                 <button
                   disabled={busyId === permTarget.id}
                   onClick={savePermissions}
-                  className="flex-1 px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-all"
+                  className="flex-1 px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-all active:scale-[0.98] shadow-sm shadow-indigo-600/20"
                 >
                   Salvar
                 </button>
