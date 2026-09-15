@@ -21,8 +21,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: '/logo.png',
-      badge: '/logo.png',
+      icon: '/logo-pdf.png',
+      badge: '/logo-pdf.png',
       tag: data.tag || 'munago-alerta-prazo',
       data: { url: data.url || '/' },
       requireInteraction: false,
