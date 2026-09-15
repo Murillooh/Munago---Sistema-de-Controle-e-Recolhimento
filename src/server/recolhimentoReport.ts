@@ -213,8 +213,11 @@ export function buildRecolhimentoReportHtml(
   opts: BuildReportOptions = {}
 ): string {
   const generatedAt = opts.generatedAt ?? new Date();
+  // Sem timeZone explícito, isso usa o fuso do processo Node — na Vercel é
+  // UTC, então o horário saía 3h à frente do horário do Brasil.
   const generatedAtStr = generatedAt.toLocaleString("pt-BR", {
     day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
   }).replace(",", " às");
 
   const totalValor = records.reduce((acc, x) => acc + x.valor, 0);

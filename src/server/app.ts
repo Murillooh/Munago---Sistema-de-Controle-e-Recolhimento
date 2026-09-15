@@ -391,6 +391,10 @@ export async function createApp() {
   // válida (evita qualquer um sem login gastar Chromium do servidor).
   // ---------------------------------------------------------------------
   app.post('/api/reports/pdf', requireDb, requireAuth, async (req, res) => {
+    // Marca o instante em que o pedido chegou — o Chromium ainda leva alguns
+    // segundos pra subir e renderizar, então "agora" só nesse ponto já não
+    // seria mais o horário em que o usuário de fato pediu o relatório.
+    const requestedAt = new Date();
     try {
       const items = Array.isArray(req.body?.items) ? req.body.items : [];
       if (items.length === 0) {
@@ -418,6 +422,7 @@ export async function createApp() {
       }));
 
       const pdf = await generateRecolhimentoReportPdf(records, {
+        generatedAt: requestedAt,
         title: typeof req.body?.title === 'string' ? req.body.title : undefined,
         lede: typeof req.body?.lede === 'string' ? req.body.lede : undefined,
       });
