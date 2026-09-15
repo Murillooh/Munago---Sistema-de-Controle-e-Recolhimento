@@ -10,11 +10,15 @@ import {
   ShieldAlert,
   Search,
   Zap,
+  Plus,
+  X,
 } from 'lucide-react';
+
 interface AsaasIntegrationViewProps {
   items: RecolhimentoItem[];
   unidades: Unidade[];
   onUpdateItem: (item: RecolhimentoItem) => void;
+  onAddItem: (item: RecolhimentoItem) => void;
 }
 
 const onlyDigits = (v: string) => (v || '').replace(/\D/g, '');
@@ -27,7 +31,20 @@ const BILLING_TYPE_OPTIONS: { value: AsaasBillingType; label: string }[] = [
   { value: 'UNDEFINED', label: 'Pix + Boleto' },
 ];
 
-export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ items, unidades, onUpdateItem }) => {
+const MONTHS_PT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+// "2026-08-30" (input date) -> "30/08/2026" (formato usado no resto do sistema).
+const isoToBr = (iso: string) => {
+  const [y, m, d] = iso.split('-');
+  return d && m && y ? `${d}/${m}/${y}` : '';
+};
+const competenciaFromIso = (iso: string) => {
+  const d = new Date(`${iso}T00:00:00`);
+  return isNaN(d.getTime()) ? '' : `${MONTHS_PT[d.getMonth()]}/${String(d.getFullYear()).slice(-2)}`;
+};
+
+const EMPTY_AD_HOC_FORM = { unidadeId: '', valor: '', vencimento: '', descricao: '', cCusto: '' };
+
+export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ items, unidades, onUpdateItem, onAddItem }) => {
   // Antes existia toggle Sandbox/Produção — pedido explícito do usuário pra
   // sempre ser real, sem alternância nenhuma (evita esquecer trocado e uma
   // cobrança de verdade cair como teste, ou vice-versa).
@@ -100,6 +117,61 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   const handleGenerateCharge = async (item: RecolhimentoItem) => {
     const result = await generateCharge(item);
     if (result.ok === false) alert('Erro ao gerar cobrança no ASAAS: ' + result.error);
+  };
+
+  // Cobrança avulsa: igual criar uma cobrança nova direto dentro do ASAAS
+  // (escolhe o cliente, preenche valor/vencimento/descrição, gera) — sem
+  // precisar já existir um lançamento pendente na Planilha antes.
+  const [showAdHocModal, setShowAdHocModal] = useState(false);
+  const [adHocForm, setAdHocForm] = useState(EMPTY_AD_HOC_FORM);
+  const [adHocGenerating, setAdHocGenerating] = useState(false);
+
+  const openAdHocModal = () => {
+    setAdHocForm(EMPTY_AD_HOC_FORM);
+    setShowAdHocModal(true);
+  };
+
+  const adHocUnidade = unidades.find((u) => u.id === adHocForm.unidadeId);
+
+  const handleAdHocUnidadeChange = (unidadeId: string) => {
+    const u = unidades.find((x) => x.id === unidadeId);
+    setAdHocForm((prev) => ({ ...prev, unidadeId, cCusto: u?.cCustoPadrao || prev.cCusto }));
+  };
+
+  const handleGenerateAdHoc = async () => {
+    if (!adHocUnidade || !adHocForm.valor || !adHocForm.vencimento) return;
+
+    // O lançamento entra na Planilha ANTES de chamar o ASAAS — generateCharge
+    // atualiza o item pelo id via onUpdateItem, que só acha algo que já
+    // exista na lista. Se a cobrança falhar, o lançamento continua lá como
+    // "Aguardando pagamento" normal, pronto pra tentar gerar de novo na lista.
+    const newItem: RecolhimentoItem = {
+      id: `item-${Date.now()}`,
+      franquia: adHocUnidade.nome,
+      cnpj: adHocUnidade.cnpj,
+      cCusto: adHocForm.cCusto || adHocUnidade.cCustoPadrao || '',
+      dataCriacao: new Date().toLocaleDateString('pt-BR'),
+      vencimento: isoToBr(adHocForm.vencimento),
+      vencimentoOriginal: isoToBr(adHocForm.vencimento),
+      dataPagamento: '',
+      valor: Number(adHocForm.valor) || 0,
+      status: 'Aguardando pagamento',
+      competenciaRecolhimento: competenciaFromIso(adHocForm.vencimento),
+      competenciaPagamento: '',
+      descricao: adHocForm.descricao || `Cobrança avulsa - ${adHocUnidade.nome}`,
+    };
+
+    setAdHocGenerating(true);
+    try {
+      onAddItem(newItem);
+      const result = await generateCharge(newItem);
+      if (result.ok === false) {
+        alert(`Lançamento adicionado à Planilha, mas a cobrança falhou: ${result.error}\n\nPode tentar gerar de novo na lista abaixo.`);
+      }
+      setShowAdHocModal(false);
+    } finally {
+      setAdHocGenerating(false);
+    }
   };
 
   // Recebida/Confirmada já foi paga — não faz sentido gerar cobrança nova.
@@ -208,9 +280,18 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
             <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Gerar Cobranças Pix / Boleto (ASAAS)</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">Selecione uma ou várias franquias pendentes para emitir cobrança via API do ASAAS.</p>
           </div>
-          <span className="bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 text-xs font-bold px-3 py-1 rounded-full border border-amber-200 dark:border-amber-800/50 shrink-0">
-            {pendingItems.length} Pendentes
-          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 text-xs font-bold px-3 py-1 rounded-full border border-amber-200 dark:border-amber-800/50">
+              {pendingItems.length} Pendentes
+            </span>
+            <button
+              onClick={openAdHocModal}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Nova Cobrança</span>
+            </button>
+          </div>
         </div>
 
         {items.length > 0 && (
@@ -372,6 +453,109 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
           )}
         </div>
       </div>
+
+      {showAdHocModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
+              <div>
+                <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight">Nova Cobrança Avulsa</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Cria o lançamento na Planilha e gera a cobrança no ASAAS na hora.</p>
+              </div>
+              <button onClick={() => setShowAdHocModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors shrink-0">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Franquia (Unidade)</label>
+                <select
+                  value={adHocForm.unidadeId}
+                  onChange={(e) => handleAdHocUnidadeChange(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                >
+                  <option value="">Selecione a franquia...</option>
+                  {unidades.map((u) => (
+                    <option key={u.id} value={u.id}>{u.nome}</option>
+                  ))}
+                </select>
+                {adHocUnidade && (
+                  <p className="text-[10px] text-slate-400 mt-1 font-mono">{adHocUnidade.cnpj || 'sem CNPJ cadastrado'}</p>
+                )}
+                {adHocUnidade && !adHocUnidade.asaasApiKey && (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-1">Sem chave ASAAS configurada para esta unidade (Bases &gt; Unidades).</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Valor (R$)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={adHocForm.valor}
+                    onChange={(e) => setAdHocForm({ ...adHocForm, valor: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                    placeholder="0,00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Vencimento</label>
+                  <input
+                    type="date"
+                    value={adHocForm.vencimento}
+                    onChange={(e) => setAdHocForm({ ...adHocForm, vencimento: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">C. Custo</label>
+                <input
+                  type="text"
+                  value={adHocForm.cCusto}
+                  onChange={(e) => setAdHocForm({ ...adHocForm, cCusto: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                  placeholder="Ex: CANINDÉ"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Descrição</label>
+                <input
+                  type="text"
+                  value={adHocForm.descricao}
+                  onChange={(e) => setAdHocForm({ ...adHocForm, descricao: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                  placeholder="Ex: PAGAMENTO REF AO RECOLHIMENTO DE SETEMBRO 2026"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAdHocModal(false)}
+                  className="flex-1 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold rounded-xl text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={adHocGenerating || !adHocUnidade || !adHocUnidade.asaasApiKey || !adHocForm.valor || !adHocForm.vencimento}
+                  onClick={handleGenerateAdHoc}
+                  className="flex-1 px-4 py-2.5 bg-emerald-600 text-white font-black rounded-xl text-xs hover:bg-emerald-700 disabled:opacity-50 transition-all shadow-lg shadow-emerald-600/20 uppercase tracking-widest flex items-center justify-center space-x-2"
+                >
+                  {adHocGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  <span>{adHocGenerating ? 'Gerando...' : 'Gerar no ASAAS'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

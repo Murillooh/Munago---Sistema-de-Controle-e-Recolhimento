@@ -781,7 +781,7 @@ export default function App() {
               <NotificationsView items={items} goalSettings={goalSettings} searchTerm={searchTerm} sessionToken={sessionToken} />
             )}
             {activeTab === 'asaas' && canAccessTab(currentUser, 'asaas') && (
-              <AsaasIntegrationView items={items} unidades={unidades} onUpdateItem={handleUpdateItem} />
+              <AsaasIntegrationView items={items} unidades={unidades} onUpdateItem={handleUpdateItem} onAddItem={handleAddItem} />
             )}
             {activeTab === 'usuarios' && currentUser?.role === 'admin' && (
               <AdminUsersView sessionToken={sessionToken} currentUserId={currentUser.id} />
