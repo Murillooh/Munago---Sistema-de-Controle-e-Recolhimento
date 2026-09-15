@@ -130,7 +130,17 @@ export default function App() {
     setEstoqueItems([]);
   };
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const VALID_TABS: ActiveTab[] = ['dashboard', 'tabela', 'metas', 'notificacoes', 'asaas', 'bases', 'relatorios', 'usuarios', 'estoque'];
+  // Persiste a aba atual — sem isso, um F5 sempre voltava pro Dashboard,
+  // mesmo estando em outra tela no meio de um trabalho.
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
+    const saved = localStorage.getItem(storageKey('locgrupo_active_tab'));
+    return VALID_TABS.includes(saved as ActiveTab) ? (saved as ActiveTab) : 'dashboard';
+  });
+  useEffect(() => {
+    localStorage.setItem(storageKey('locgrupo_active_tab'), activeTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, currentUser]);
   // Clique num card do Dashboard ("Em Aberto", "Confirmado"...) pode levar
   // pra Planilha já com esse status filtrado, em vez de cair na tabela toda.
   const [pendingStatusFilter, setPendingStatusFilter] = useState<string | null>(null);
