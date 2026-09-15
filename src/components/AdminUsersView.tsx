@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AuthUser } from '../types';
-import { Users, ShieldCheck, ShieldX, ShieldAlert, Clock, RefreshCw, ShieldOff, Crown } from 'lucide-react';
+import { Users, ShieldCheck, ShieldX, ShieldAlert, Clock, RefreshCw, ShieldOff, Crown, KeyRound, Copy, Check, X, Trash2 } from 'lucide-react';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface AdminUsersViewProps {
   sessionToken: string | null;
@@ -12,6 +13,9 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ sessionToken, cu
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<{ user: AuthUser; password: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<AuthUser | null>(null);
 
   const authHeaders = {
     'Content-Type': 'application/json',
@@ -54,6 +58,48 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ sessionToken, cu
         setUsers((prev) => prev.map((u) => (u.id === id ? data : u)));
       } else {
         alert(data.error || 'Erro ao atualizar usuário.');
+      }
+    } catch {
+      alert('Erro de conexão com o servidor.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const deleteUser = async (user: AuthUser) => {
+    setBusyId(user.id);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: 'DELETE',
+        headers: authHeaders,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUsers((prev) => prev.filter((u) => u.id !== user.id));
+      } else {
+        alert(data.error || 'Erro ao excluir usuário.');
+      }
+    } catch {
+      alert('Erro de conexão com o servidor.');
+    } finally {
+      setBusyId(null);
+      setDeleteTarget(null);
+    }
+  };
+
+  const resetPassword = async (user: AuthUser) => {
+    setBusyId(user.id);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/reset-password`, {
+        method: 'POST',
+        headers: authHeaders,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResetResult({ user, password: data.tempPassword });
+        setCopied(false);
+      } else {
+        alert(data.error || 'Erro ao redefinir senha.');
       }
     } catch {
       alert('Erro de conexão com o servidor.');
@@ -232,6 +278,14 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ sessionToken, cu
                                 <ShieldOff className="w-3.5 h-3.5" />
                               </button>
                             )}
+                            <button
+                              disabled={busyId === user.id}
+                              onClick={() => resetPassword(user)}
+                              title="Redefinir senha"
+                              className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-all"
+                            >
+                              <KeyRound className="w-3.5 h-3.5" />
+                            </button>
                             {user.role !== 'admin' ? (
                               <button
                                 disabled={busyId === user.id}
@@ -251,6 +305,14 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ sessionToken, cu
                                 <ShieldX className="w-3.5 h-3.5" />
                               </button>
                             )}
+                            <button
+                              disabled={busyId === user.id}
+                              onClick={() => setDeleteTarget(user)}
+                              title="Excluir usuário"
+                              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-all"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         )}
                       </td>
@@ -262,6 +324,61 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ sessionToken, cu
           </div>
         </div>
       </div>
+
+      {/* Senha temporária gerada — repassar pro usuário direto (WhatsApp/e-mail) */}
+      {resetResult && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setResetResult(null)} />
+          <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-amber-500 text-white rounded-xl shadow-lg shadow-amber-500/20">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-slate-100 tracking-tight">Senha redefinida</h3>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-widest font-bold truncate max-w-[180px]">{resetResult.user.name}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setResetResult(null)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Sessões antigas desse usuário foram encerradas. Repasse a senha abaixo por um canal seguro — ela só aparece agora, uma vez.
+              </p>
+
+              <div className="flex items-center gap-2 p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
+                <code className="flex-1 text-sm font-black text-slate-900 dark:text-slate-100 tracking-widest">{resetResult.password}</code>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(resetResult.password).catch(() => {});
+                    setCopied(true);
+                  }}
+                  className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors shrink-0"
+                  title="Copiar"
+                >
+                  {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-500" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Excluir usuário"
+        message={`Tem certeza que deseja excluir "${deleteTarget?.name}"? Os lançamentos criados por essa conta continuam no sistema, só o acesso é removido.`}
+        confirmLabel="Excluir"
+        onConfirm={() => deleteTarget && deleteUser(deleteTarget)}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 };

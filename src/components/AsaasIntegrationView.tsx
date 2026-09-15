@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { RecolhimentoItem, Unidade } from '../types';
 import {
   CreditCard,
@@ -8,6 +8,8 @@ import {
   QrCode,
   Building2,
   ShieldAlert,
+  Search,
+  Zap,
 } from 'lucide-react';
 
 interface AsaasIntegrationViewProps {
@@ -33,57 +35,104 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   useEffect(() => {
     localStorage.setItem(ASAAS_MODE_KEY, String(sandbox));
   }, [sandbox]);
-  const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
+  // Conjunto em vez de um id só — geração em lote dispara várias ao mesmo
+  // tempo, cada botão precisa saber só se A SUA cobrança está em andamento.
+  const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
+  const [bulkGenerating, setBulkGenerating] = useState(false);
   const [generatedCharges, setGeneratedCharges] = useState<Record<string, any>>({});
+  const [search, setSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Resolve a unidade (e sua chave de API) que corresponde a um lançamento, via CNPJ.
   const findUnidade = (item: RecolhimentoItem) =>
     unidades.find((u) => onlyDigits(u.cnpj) && onlyDigits(u.cnpj) === onlyDigits(item.cnpj));
 
-  const handleGenerateCharge = async (item: RecolhimentoItem) => {
+  // Devolve o motivo de erro em vez de já mostrar alert() — a geração em
+  // lote precisa acumular os erros de vários itens numa mensagem só, não
+  // interromper tudo no primeiro alert() como fazia o botão individual.
+  const generateCharge = async (item: RecolhimentoItem): Promise<{ ok: true } | { ok: false; error: string }> => {
     const unidade = findUnidade(item);
     const apiKey = unidade?.asaasApiKey;
-
     if (!apiKey) {
-      alert(`Nenhuma chave de API ASAAS configurada para esta unidade.\nConfigure em Bases > Unidades (${unidade?.nome || item.franquia}).`);
-      return;
+      return { ok: false, error: `${item.franquia}: sem chave ASAAS configurada (Bases > Unidades).` };
     }
 
-    setLoadingItemId(item.id);
+    setLoadingIds((prev) => new Set(prev).add(item.id));
     try {
       const res = await fetch('/api/asaas/create-charge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey,
-          sandbox,
-          chargeData: item,
-        }),
+        body: JSON.stringify({ apiKey, sandbox, chargeData: item }),
       });
       const data = await res.json();
       if (data.success) {
-        setGeneratedCharges((prev) => ({
-          ...prev,
-          [item.id]: data,
-        }));
+        setGeneratedCharges((prev) => ({ ...prev, [item.id]: data }));
         // Cobrança emitida != paga: mantém "Aguardando pagamento" com o asaasId
         // vinculado, para o botão "Sincronizar ASAAS" (Planilha) conseguir
         // consultar e atualizar o status quando o pagamento for confirmado.
-        onUpdateItem({
-          ...item,
-          asaasId: data.chargeId,
-        });
-      } else {
-        alert('Erro ao gerar cobrança no ASAAS: ' + (data.error || 'Erro desconhecido'));
+        onUpdateItem({ ...item, asaasId: data.chargeId });
+        return { ok: true };
       }
-    } catch (err) {
-      alert('Erro ao comunicar com a API do ASAAS.');
+      return { ok: false, error: `${item.franquia}: ${data.error || 'erro desconhecido'}` };
+    } catch {
+      return { ok: false, error: `${item.franquia}: falha ao comunicar com a API do ASAAS.` };
     } finally {
-      setLoadingItemId(null);
+      setLoadingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item.id);
+        return next;
+      });
     }
   };
 
+  const handleGenerateCharge = async (item: RecolhimentoItem) => {
+    const result = await generateCharge(item);
+    if (result.ok === false) alert('Erro ao gerar cobrança no ASAAS: ' + result.error);
+  };
+
   const pendingItems = items.filter((i) => i.status === 'Aguardando pagamento');
+
+  const filteredPendingItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return pendingItems;
+    return pendingItems.filter(
+      (i) => i.franquia.toLowerCase().includes(q) || onlyDigits(i.cnpj).includes(onlyDigits(q))
+    );
+  }, [pendingItems, search]);
+
+  // Só entra na seleção/lote quem realmente pode ser gerado agora — item já
+  // emitido ou sem chave de unidade não tem o que fazer num "gerar em lote".
+  const billableItems = filteredPendingItems.filter((i) => !i.asaasId && Boolean(findUnidade(i)?.asaasApiKey));
+  const allBillableSelected = billableItems.length > 0 && billableItems.every((i) => selectedIds.has(i.id));
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllBillable = () => {
+    setSelectedIds(allBillableSelected ? new Set() : new Set(billableItems.map((i) => i.id)));
+  };
+
+  const handleBulkGenerate = async () => {
+    const targets = billableItems.filter((i) => selectedIds.has(i.id));
+    if (targets.length === 0) return;
+    setBulkGenerating(true);
+    try {
+      const results = await Promise.all(targets.map((item) => generateCharge(item)));
+      const failures = results.filter((r): r is { ok: false; error: string } => !r.ok);
+      setSelectedIds(new Set());
+      if (failures.length > 0) {
+        alert(`${targets.length - failures.length} de ${targets.length} cobranças geradas.\n\nFalhas:\n${failures.map((f) => f.error).join('\n')}`);
+      }
+    } finally {
+      setBulkGenerating(false);
+    }
+  };
 
   return (
     <div className="w-full space-y-6 pb-12">
@@ -129,23 +178,63 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
 
       {/* Pending Items for ASAAS Billing */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
           <div>
             <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Gerar Cobranças Pix / Boleto (ASAAS)</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Selecione uma franquia pendente para emitir a cobrança instantaneamente via API do ASAAS.</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Selecione uma ou várias franquias pendentes para emitir cobrança via API do ASAAS.</p>
           </div>
-          <span className="bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 text-xs font-bold px-3 py-1 rounded-full border border-amber-200 dark:border-amber-800/50">
+          <span className="bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 text-xs font-bold px-3 py-1 rounded-full border border-amber-200 dark:border-amber-800/50 shrink-0">
             {pendingItems.length} Pendentes
           </span>
         </div>
+
+        {pendingItems.length > 0 && (
+          <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center bg-slate-50/50 dark:bg-slate-800/30">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por franquia ou CNPJ..."
+                className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 outline-none"
+              />
+            </div>
+            <button
+              onClick={handleBulkGenerate}
+              disabled={selectedIds.size === 0 || bulkGenerating}
+              title={selectedIds.size === 0 ? 'Selecione ao menos uma franquia' : undefined}
+              className="flex items-center justify-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white rounded-xl text-xs font-bold transition-all shrink-0"
+            >
+              {bulkGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+              <span>{bulkGenerating ? 'Gerando...' : `Gerar em lote${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}</span>
+            </button>
+          </div>
+        )}
 
         <div className="divide-y divide-slate-100 dark:divide-slate-800">
           {pendingItems.length === 0 ? (
             <div className="p-12 text-center text-slate-400 dark:text-slate-500 text-xs">
               Nenhuma franquia com pagamento pendente no momento para envio ao ASAAS.
             </div>
+          ) : filteredPendingItems.length === 0 ? (
+            <div className="p-12 text-center text-slate-400 dark:text-slate-500 text-xs">
+              Nenhuma franquia pendente bate com "{search}".
+            </div>
           ) : (
-            pendingItems.map((item) => {
+            <>
+            {billableItems.length > 0 && (
+              <label className="flex items-center space-x-2 px-4 sm:px-6 py-2.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide cursor-pointer select-none bg-slate-50/50 dark:bg-slate-800/20">
+                <input
+                  type="checkbox"
+                  checked={allBillableSelected}
+                  onChange={toggleSelectAllBillable}
+                  className="w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 dark:bg-slate-700 dark:border-slate-600"
+                />
+                <span>Selecionar todas as prontas pra gerar ({billableItems.length})</span>
+              </label>
+            )}
+            {filteredPendingItems.map((item) => {
               // asaasId persiste entre recarregamentos; generatedCharges só existe
               // na sessão atual (traz o link da fatura). O asaasId é quem decide
               // se já foi emitida, pra não duplicar cobrança num F5.
@@ -153,9 +242,19 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
               const generated = generatedCharges[item.id];
               const unidade = findUnidade(item);
               const hasKey = Boolean(unidade?.asaasApiKey);
+              const canSelect = !alreadyEmitted && hasKey;
               return (
                 <div key={item.id} className="p-4 sm:p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                  <div className="space-y-1">
+                  <div className="space-y-1 flex items-start gap-3 min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(item.id)}
+                      onChange={() => toggleSelected(item.id)}
+                      disabled={!canSelect}
+                      title={!canSelect ? 'Já emitida ou sem chave de API configurada' : undefined}
+                      className="mt-1 w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 dark:bg-slate-700 dark:border-slate-600 disabled:opacity-30 shrink-0"
+                    />
+                    <div>
                     <div className="flex items-center space-x-2">
                       <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{item.franquia}</span>
                       <span className="text-xs font-mono text-slate-500 dark:text-slate-400">({item.cnpj})</span>
@@ -190,6 +289,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                         <span>Chave ASAAS não configurada para esta unidade (Bases &gt; Unidades)</span>
                       </div>
                     )}
+                    </div>
                   </div>
 
                   <div className="flex items-center space-x-4 w-full md:w-auto justify-between md:justify-end">
@@ -201,7 +301,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
 
                     <button
                       onClick={() => handleGenerateCharge(item)}
-                      disabled={loadingItemId === item.id || alreadyEmitted || !hasKey}
+                      disabled={loadingIds.has(item.id) || alreadyEmitted || !hasKey}
                       title={!hasKey ? 'Configure a chave de API desta unidade em Bases > Unidades' : undefined}
                       className={`flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-semibold shadow-sm transition-all ${
                         alreadyEmitted
@@ -211,7 +311,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                           : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                       }`}
                     >
-                      {loadingItemId === item.id ? (
+                      {loadingIds.has(item.id) ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
                         <Send className="w-4 h-4" />
@@ -221,7 +321,8 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                   </div>
                 </div>
               );
-            })
+            })}
+            </>
           )}
         </div>
       </div>

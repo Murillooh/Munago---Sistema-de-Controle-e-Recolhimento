@@ -1,5 +1,5 @@
 import React from 'react';
-import { RecolhimentoItem, GoalSettings } from '../types';
+import { RecolhimentoItem, GoalSettings, CONFIRMADO_RECEBIDO_FILTER } from '../types';
 import {
   TrendingUp,
   CheckCircle2,
@@ -23,7 +23,8 @@ import {
 interface DashboardViewProps {
   items: RecolhimentoItem[];
   goalSettings: GoalSettings;
-  onNavigateTable: () => void;
+  onNavigateTable: (status?: string) => void;
+  onNavigateMetas: () => void;
   searchTerm: string;
 }
 
@@ -31,14 +32,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   items,
   goalSettings,
   onNavigateTable,
+  onNavigateMetas,
   searchTerm,
 }) => {
-  const filteredItems = items.filter(item => 
+  const filteredItems = items.filter(item =>
     item.franquia.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.cnpj.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.descricao.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  
+
+  // dd/mm/aaaa -> Date. "Últimos Lançamentos" pegava os 5 últimos do
+  // ARRAY (ordem de importação/inserção) — um import fora de ordem cronológica
+  // fazia um lançamento de meses atrás aparecer como "recente". Ordena pela
+  // data de criação de verdade.
+  const parseDataCriacao = (v: string) => {
+    const [d, m, y] = (v || '').split('/').map(Number);
+    return d && m && y ? new Date(y, m - 1, d).getTime() : 0;
+  };
+  const recentItems = [...filteredItems]
+    .sort((a, b) => parseDataCriacao(b.dataCriacao) - parseDataCriacao(a.dataCriacao))
+    .slice(0, 5);
+
   // Use filteredItems for calculations and rendering...
   const totalValue = filteredItems.reduce((sum, item) => sum + (item.valor || 0), 0);
   
@@ -100,7 +114,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <h2 className="text-xl font-black tracking-tight leading-tight">Monitoramento de Performance e <br /><span className="text-blue-400">Evolução Estratégica</span></h2>
           </div>
           <button
-            onClick={onNavigateTable}
+            onClick={() => onNavigateTable()}
             className="flex items-center space-x-2 bg-white text-slate-900 hover:bg-blue-50 px-4 py-2.5 rounded-xl font-bold text-xs transition-all shadow-lg hover:shadow-xl hover:scale-105 active:scale-95"
           >
             <span>Gerenciar Planilha</span>
@@ -111,7 +125,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* KPI Cards - Compact grid */}
       <div id="tour-kpis" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200/80 dark:border-slate-800/60 shadow-sm relative overflow-hidden group card-lift accent-top" style={{'--accent-from': '#3b82f6', '--accent-to': '#6366f1'} as React.CSSProperties}>
+        <button
+          onClick={() => onNavigateTable()}
+          title="Ver todos os registros na Planilha"
+          className="text-left bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200/80 dark:border-slate-800/60 shadow-sm relative overflow-hidden group card-lift accent-top cursor-pointer"
+          style={{'--accent-from': '#3b82f6', '--accent-to': '#6366f1'} as React.CSSProperties}
+        >
           <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">Total Geral</p>
           <h3 className="text-xl font-black text-slate-900 dark:text-slate-100">
             R$ {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -120,9 +139,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="bg-slate-100/80 dark:bg-slate-800/80 px-1.5 py-0.5 rounded-md mr-1.5">{items.length}</span>
             REGISTROS
           </div>
-        </div>
+        </button>
 
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200/80 dark:border-slate-800/60 shadow-sm group card-lift accent-top" style={{'--accent-from': '#10b981', '--accent-to': '#059669'} as React.CSSProperties}>
+        <button
+          onClick={() => onNavigateTable(CONFIRMADO_RECEBIDO_FILTER)}
+          title="Ver confirmados e recebidos na Planilha"
+          className="text-left bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200/80 dark:border-slate-800/60 shadow-sm group card-lift accent-top cursor-pointer"
+          style={{'--accent-from': '#10b981', '--accent-to': '#059669'} as React.CSSProperties}
+        >
           <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-0.5">Confirmado</p>
           <h3 className="text-xl font-black text-emerald-600 dark:text-emerald-400">
             R$ {confirmedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -131,9 +155,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <CheckCircle2 className="w-3 h-3 mr-1" />
             {countConfirmed} UNIDADES
           </div>
-        </div>
+        </button>
 
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200/80 dark:border-slate-800/60 shadow-sm group card-lift accent-top" style={{'--accent-from': '#f59e0b', '--accent-to': '#d97706'} as React.CSSProperties}>
+        <button
+          onClick={() => onNavigateTable('Aguardando pagamento')}
+          title="Ver pendências na Planilha"
+          className="text-left bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200/80 dark:border-slate-800/60 shadow-sm group card-lift accent-top cursor-pointer"
+          style={{'--accent-from': '#f59e0b', '--accent-to': '#d97706'} as React.CSSProperties}
+        >
           <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-0.5">Em Aberto</p>
           <h3 className="text-xl font-black text-amber-600 dark:text-amber-400">
             R$ {pendingValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -142,9 +171,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <Clock className="w-3 h-3 mr-1" />
             {countPending} PENDÊNCIAS
           </div>
-        </div>
+        </button>
 
-        <div className="bg-gradient-to-br from-indigo-600 to-violet-600 p-5 rounded-xl border border-indigo-400/20 shadow-lg shadow-indigo-600/15 relative overflow-hidden card-lift">
+        <button
+          onClick={onNavigateMetas}
+          title="Ver detalhes da meta"
+          className="text-left bg-gradient-to-br from-indigo-600 to-violet-600 p-5 rounded-xl border border-indigo-400/20 shadow-lg shadow-indigo-600/15 relative overflow-hidden card-lift group cursor-pointer"
+        >
           <div className="absolute inset-0 shimmer pointer-events-none" />
           <div className="relative z-10">
           <div className="flex justify-between items-start mb-0.5">
@@ -161,7 +194,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             />
           </div>
           </div>
-        </div>
+        </button>
       </div>
 
       {/* Evolution Trend Chart - MAIN FOCUS */}
@@ -249,7 +282,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800/60 shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
           <h3 className="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-wider">Últimos Lançamentos</h3>
-          <button onClick={onNavigateTable} className="text-[10px] font-bold text-blue-600 hover:text-blue-700">Ver todos ({filteredItems.length}) &rarr;</button>
+          <button onClick={() => onNavigateTable()} className="text-[10px] font-bold text-blue-600 hover:text-blue-700">Ver todos ({filteredItems.length}) &rarr;</button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-[11px] border-collapse whitespace-nowrap">
@@ -263,7 +296,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredItems.slice(-5).reverse().map((item) => (
+              {recentItems.map((item) => (
                 <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                   <td className="py-2 px-5 font-bold text-slate-900 dark:text-slate-100">{item.franquia}</td>
                   <td className="py-2 px-5 text-slate-500">{item.vencimento}</td>

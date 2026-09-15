@@ -168,6 +168,57 @@ export async function createApp() {
     }
   });
 
+  // Remove um usuário de vez (cadastro rejeitado/spam etc). Sessões e
+  // assinaturas de push desse usuário somem junto (ON DELETE CASCADE) —
+  // os lançamentos que ele criou continuam no banco, só ficam com um
+  // owner_id que não existe mais (mesma situação de qualquer conta
+  // apagada; não há como saber se o admin quer apagar os dados junto ou
+  // repassar pra outra conta, então não mexe nisso aqui).
+  app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
+    try {
+      const authUserId = (req as any).authUser.id;
+      if (req.params.id === authUserId) {
+        return res.status(400).json({ error: 'Você não pode excluir a própria conta.' });
+      }
+
+      const target = await pool!.query('SELECT role FROM users WHERE id = $1', [req.params.id]);
+      if (target.rows.length === 0) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+      if (target.rows[0].role === 'admin') {
+        const adminCount = await pool!.query("SELECT COUNT(*)::int AS n FROM users WHERE role = 'admin'");
+        if (adminCount.rows[0].n <= 1) {
+          return res.status(400).json({ error: 'Não é possível excluir o único administrador do sistema.' });
+        }
+      }
+
+      await pool!.query('DELETE FROM users WHERE id = $1', [req.params.id]);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao excluir usuário.', details: err.message });
+    }
+  });
+
+  // Sem provedor de e-mail configurado, não tem "esqueci minha senha"
+  // self-service — o admin gera uma senha temporária na hora e repassa pro
+  // usuário direto (WhatsApp/e-mail). Fica só na resposta desta chamada,
+  // nunca gravada em texto puro nem logada.
+  app.post('/api/admin/users/:id/reset-password', requireAdmin, async (req, res) => {
+    try {
+      const tempPassword = crypto.randomBytes(6).toString('base64url'); // 8 chars, url-safe
+      const passwordHash = await bcrypt.hash(tempPassword, 10);
+      const result = await pool!.query(
+        'UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id',
+        [passwordHash, req.params.id]
+      );
+      if (result.rows.length === 0) return res.status(404).json({ error: 'Usuário não encontrado.' });
+      // Invalida sessões antigas — a senha mudou, ninguém deve continuar logado com a antiga.
+      await pool!.query('DELETE FROM sessions WHERE user_id = $1', [req.params.id]);
+      res.json({ tempPassword });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao redefinir senha.', details: err.message });
+    }
+  });
+
   // Todo /api/items exige login (requireAuth) e é sempre filtrado pelo
   // dono (owner_id = usuário da sessão) — uma conta nunca vê ou edita o
   // lançamento de outra, mesmo sabendo o id.

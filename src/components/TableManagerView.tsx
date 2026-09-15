@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
-import { RecolhimentoItem } from '../types';
+import { RecolhimentoItem, CONFIRMADO_RECEBIDO_FILTER } from '../types';
 import {
   Search,
   Filter,
@@ -81,6 +81,9 @@ interface TableManagerViewProps {
   onNavigateBases: () => void;
   searchTerm: string;
   sessionToken: string | null;
+  // Vindo do Dashboard (clique num KPI) — aplica esse status já na primeira
+  // renderização, em vez do usuário ter que selecionar de novo no filtro.
+  initialStatusFilter?: string | null;
 }
 
 export const TableManagerView = forwardRef<any, TableManagerViewProps>(function TableManagerView(props, ref) {
@@ -96,13 +99,14 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
     onNavigateBases,
     searchTerm,
     sessionToken,
+    initialStatusFilter,
   } = props;
   
   useImperativeHandle(ref, () => ({
     handleOpenAdd: handleOpenAdd,
   }));
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('todos');
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter || 'todos');
   const [competenciaFilter, setCompetenciaFilter] = useState<string>('todas');
   const [cCustoFilter, setCCustoFilter] = useState<string>('todos');
   const [startDate, setStartDate] = useState<string>('');
@@ -340,7 +344,11 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
 
       const matchesSearch = localMatchesSearch && globalMatchesSearch;
 
-      const matchesStatus = statusFilter === 'todos' || item.status === statusFilter;
+      const matchesStatus =
+        statusFilter === 'todos' ||
+        (statusFilter === CONFIRMADO_RECEBIDO_FILTER
+          ? item.status === 'Confirmada' || item.status === 'Recebida'
+          : item.status === statusFilter);
       const matchesCompetencia =
         competenciaFilter === 'todas' || item.competenciaRecolhimento === competenciaFilter;
       const matchesCCusto = cCustoFilter === 'todos' || item.cCusto === cCustoFilter;
@@ -673,6 +681,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
               <option value="todos">Todos os Status</option>
               <option value="Recebida">Recebida</option>
               <option value="Confirmada">Confirmada</option>
+              <option value={CONFIRMADO_RECEBIDO_FILTER}>Confirmada + Recebida</option>
               <option value="Aguardando pagamento">Pendente</option>
               <option value="Atrasado">Atrasado</option>
             </select>

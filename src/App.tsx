@@ -126,6 +126,9 @@ export default function App() {
   };
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  // Clique num card do Dashboard ("Em Aberto", "Confirmado"...) pode levar
+  // pra Planilha já com esse status filtrado, em vez de cair na tabela toda.
+  const [pendingStatusFilter, setPendingStatusFilter] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   useEffect(() => {
@@ -546,7 +549,11 @@ export default function App() {
               <DashboardView
                 items={items}
                 goalSettings={goalSettings}
-                onNavigateTable={() => setActiveTab('tabela')}
+                onNavigateTable={(status) => {
+                  setPendingStatusFilter(status ?? null);
+                  setActiveTab('tabela');
+                }}
+                onNavigateMetas={() => setActiveTab('metas')}
                 searchTerm={searchTerm}
               />
             )}
@@ -564,6 +571,7 @@ export default function App() {
                 onNavigateBases={() => setActiveTab('bases')}
                 searchTerm={searchTerm}
                 sessionToken={sessionToken}
+                initialStatusFilter={pendingStatusFilter}
               />
             )}
             {activeTab === 'bases' && (

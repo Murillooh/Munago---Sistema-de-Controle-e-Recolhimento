@@ -34,6 +34,11 @@ export interface GoalSettings {
 
 export type ActiveTab = 'dashboard' | 'tabela' | 'metas' | 'notificacoes' | 'asaas' | 'bases' | 'relatorios' | 'usuarios';
 
+// Valor especial de filtro de status pra representar "Confirmada + Recebida"
+// juntas — é como o card "Confirmado" do Dashboard soma o valor, então o
+// clique nele precisa filtrar a Planilha pelas duas, não só uma.
+export const CONFIRMADO_RECEBIDO_FILTER = '__confirmado_recebido__';
+
 export interface AuthUser {
   id: string;
   name: string;
