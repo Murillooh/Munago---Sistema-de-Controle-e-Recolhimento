@@ -109,19 +109,28 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
     if (result.ok === false) alert('Erro ao gerar cobrança no ASAAS: ' + result.error);
   };
 
+  // Recebida/Confirmada já foi paga — não faz sentido gerar cobrança nova.
+  const isBillableStatus = (status: string) => status === 'Aguardando pagamento' || status === 'Atrasado';
+
   const pendingItems = items.filter((i) => i.status === 'Aguardando pagamento');
 
+  // Sem busca, mostra só quem está realmente aguardando pagamento (visão
+  // padrão, sem poluir com franquias já pagas). Com busca, procura em TODOS
+  // os status — sem isso não dava pra achar uma franquia já confirmada ou
+  // atrasada só pra conferir/gerar uma cobrança pra ela.
   const filteredPendingItems = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return pendingItems;
-    return pendingItems.filter(
+    return items.filter(
       (i) => i.franquia.toLowerCase().includes(q) || onlyDigits(i.cnpj).includes(onlyDigits(q))
     );
-  }, [pendingItems, search]);
+  }, [items, pendingItems, search]);
 
   // Só entra na seleção/lote quem realmente pode ser gerado agora — item já
-  // emitido ou sem chave de unidade não tem o que fazer num "gerar em lote".
-  const billableItems = filteredPendingItems.filter((i) => !i.asaasId && Boolean(findUnidade(i)?.asaasApiKey));
+  // emitido, sem chave de unidade, ou já pago não tem o que fazer num "gerar em lote".
+  const billableItems = filteredPendingItems.filter(
+    (i) => !i.asaasId && Boolean(findUnidade(i)?.asaasApiKey) && isBillableStatus(i.status)
+  );
   const allBillableSelected = billableItems.length > 0 && billableItems.every((i) => selectedIds.has(i.id));
 
   const toggleSelected = (id: string) => {
@@ -223,7 +232,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
           </span>
         </div>
 
-        {pendingItems.length > 0 && (
+        {items.length > 0 && (
           <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center bg-slate-50/50 dark:bg-slate-800/30">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -231,7 +240,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por franquia ou CNPJ..."
+                placeholder="Buscar por franquia ou CNPJ (qualquer status)..."
                 className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 outline-none"
               />
             </div>
@@ -248,13 +257,11 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
         )}
 
         <div className="divide-y divide-slate-100 dark:divide-slate-800">
-          {pendingItems.length === 0 ? (
+          {filteredPendingItems.length === 0 ? (
             <div className="p-12 text-center text-slate-400 dark:text-slate-500 text-xs">
-              Nenhuma franquia com pagamento pendente no momento para envio ao ASAAS.
-            </div>
-          ) : filteredPendingItems.length === 0 ? (
-            <div className="p-12 text-center text-slate-400 dark:text-slate-500 text-xs">
-              Nenhuma franquia pendente bate com "{search}".
+              {search.trim()
+                ? `Nenhuma franquia encontrada para "${search}".`
+                : 'Nenhuma franquia com pagamento pendente no momento para envio ao ASAAS.'}
             </div>
           ) : (
             <>
@@ -278,7 +285,8 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
               const invoiceUrl = generated?.invoiceUrl || item.asaasInvoiceUrl;
               const unidade = findUnidade(item);
               const hasKey = Boolean(unidade?.asaasApiKey);
-              const canSelect = !alreadyEmitted && hasKey;
+              const alreadyPaid = !alreadyEmitted && !isBillableStatus(item.status);
+              const canSelect = !alreadyEmitted && hasKey && isBillableStatus(item.status);
               return (
                 <div key={item.id} className="p-4 sm:p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                   <div className="space-y-1 flex items-start gap-3 min-w-0">
@@ -287,13 +295,22 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                       checked={selectedIds.has(item.id)}
                       onChange={() => toggleSelected(item.id)}
                       disabled={!canSelect}
-                      title={!canSelect ? 'Já emitida ou sem chave de API configurada' : undefined}
+                      title={!canSelect ? 'Já emitida, já paga, ou sem chave de API configurada' : undefined}
                       className="mt-1 w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 dark:bg-slate-700 dark:border-slate-600 disabled:opacity-30 shrink-0"
                     />
                     <div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 flex-wrap">
                       <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{item.franquia}</span>
                       <span className="text-xs font-mono text-slate-500 dark:text-slate-400">({item.cnpj})</span>
+                      {item.status !== 'Aguardando pagamento' && (
+                        <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${
+                          item.status === 'Atrasado'
+                            ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                        }`}>
+                          {item.status}
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       Vencimento: <strong className="text-slate-700 dark:text-slate-300">{item.vencimento}</strong> • C. Custo:{' '}
@@ -319,7 +336,13 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                         </div>
                       </div>
                     )}
-                    {!alreadyEmitted && !hasKey && (
+                    {!alreadyEmitted && alreadyPaid && (
+                      <div className="mt-2 flex items-center space-x-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">
+                        <ShieldAlert className="w-3.5 h-3.5" />
+                        <span>Status "{item.status}" — nenhuma cobrança nova a gerar</span>
+                      </div>
+                    )}
+                    {!alreadyEmitted && !alreadyPaid && !hasKey && (
                       <div className="mt-2 flex items-center space-x-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
                         <ShieldAlert className="w-3.5 h-3.5" />
                         <span>Chave ASAAS não configurada para esta unidade (Bases &gt; Unidades)</span>
@@ -337,12 +360,18 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
 
                     <button
                       onClick={() => handleGenerateCharge(item)}
-                      disabled={loadingIds.has(item.id) || alreadyEmitted || !hasKey}
-                      title={!hasKey ? 'Configure a chave de API desta unidade em Bases > Unidades' : undefined}
+                      disabled={loadingIds.has(item.id) || alreadyEmitted || alreadyPaid || !hasKey}
+                      title={
+                        alreadyPaid
+                          ? `Status "${item.status}" — nenhuma cobrança nova a gerar`
+                          : !hasKey
+                          ? 'Configure a chave de API desta unidade em Bases > Unidades'
+                          : undefined
+                      }
                       className={`flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-semibold shadow-sm transition-all ${
                         alreadyEmitted
                           ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 cursor-not-allowed'
-                          : !hasKey
+                          : alreadyPaid || !hasKey
                           ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'
                           : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                       }`}
@@ -352,7 +381,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                       ) : (
                         <Send className="w-4 h-4" />
                       )}
-                      <span>{alreadyEmitted ? 'Cobrança Emitida' : 'Gerar no ASAAS'}</span>
+                      <span>{alreadyEmitted ? 'Cobrança Emitida' : alreadyPaid ? item.status : 'Gerar no ASAAS'}</span>
                     </button>
                   </div>
                 </div>
