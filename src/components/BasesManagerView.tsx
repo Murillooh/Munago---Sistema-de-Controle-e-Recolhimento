@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Unidade, BaseCategory } from '../types';
-import { Plus, Trash2, Edit2, Database, Building2, Tags, Save, X, Search } from 'lucide-react';
+import { Plus, Trash2, Edit2, Database, Building2, Tags, Save, X, Search, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface BasesManagerViewProps {
@@ -32,6 +32,16 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
   const [editingItem, setEditingItem] = useState<any>(null);
   const [formData, setFormData] = useState<any>({});
 
+  // Notificação de sucesso após salvar/excluir — sem isso o clique some no
+  // vazio, sem confirmar se a ação realmente aconteceu.
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = (message: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToastMsg(message);
+    toastTimeoutRef.current = setTimeout(() => setToastMsg(null), 3000);
+  };
+
   const handleOpenAdd = () => {
     setEditingItem(null);
     setFormData(activeSubTab === 'unidades' ? { nome: '', cnpj: '', cCustoPadrao: 'CANINDÉ', asaasApiKey: '' } : { nome: '' });
@@ -48,6 +58,9 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
     e.preventDefault();
     if (!formData.nome) return;
 
+    const isEditing = Boolean(editingItem);
+    const label = activeSubTab === 'unidades' ? 'Unidade' : 'Categoria';
+
     if (activeSubTab === 'unidades') {
       if (editingItem) {
         onUpdateUnidade({ ...editingItem, ...formData });
@@ -62,6 +75,17 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
       }
     }
     setIsModalOpen(false);
+    showToast(`${label} ${isEditing ? 'atualizada' : 'adicionada'} com sucesso.`);
+  };
+
+  const handleDelete = (id: string) => {
+    const label = activeSubTab === 'unidades' ? 'Unidade' : 'Categoria';
+    if (activeSubTab === 'unidades') {
+      onDeleteUnidade(id);
+    } else {
+      onDeleteCategoria(id);
+    }
+    showToast(`${label} excluída com sucesso.`);
   };
 
   const filteredUnidades = unidades.filter(u => 
@@ -194,8 +218,8 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
-                        <button 
-                          onClick={() => activeSubTab === 'unidades' ? onDeleteUnidade(item.id) : onDeleteCategoria(item.id)}
+                        <button
+                          onClick={() => handleDelete(item.id)}
                           className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-all"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -319,6 +343,20 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
               </form>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {toastMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: -12, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -12, x: '-50%' }}
+            className="fixed top-6 left-1/2 z-[100] flex items-center gap-2 bg-emerald-600 text-white pl-3.5 pr-4 py-2.5 rounded-xl shadow-2xl shadow-emerald-600/30 text-xs font-bold"
+          >
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{toastMsg}</span>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
