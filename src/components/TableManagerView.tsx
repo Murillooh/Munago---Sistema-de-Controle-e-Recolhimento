@@ -80,6 +80,7 @@ interface TableManagerViewProps {
   baseCategories: BaseCategory[];
   onNavigateBases: () => void;
   searchTerm: string;
+  sessionToken: string | null;
 }
 
 export const TableManagerView = forwardRef<any, TableManagerViewProps>(function TableManagerView(props, ref) {
@@ -94,6 +95,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
     baseCategories,
     onNavigateBases,
     searchTerm,
+    sessionToken,
   } = props;
   
   useImperativeHandle(ref, () => ({
@@ -500,11 +502,18 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
     exportToExcel(dataToExport);
   };
 
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
   const handleExportPDF = async () => {
-    const dataToExport = selectedIds.size > 0 
+    const dataToExport = selectedIds.size > 0
       ? items.filter(i => selectedIds.has(i.id))
       : filteredItems;
-    await exportToPDF(dataToExport);
+    setIsExportingPdf(true);
+    try {
+      await exportToPDF(dataToExport, 'relatorio_recolhimento.pdf', undefined, undefined, sessionToken);
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   return (
@@ -587,15 +596,16 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
 
           <button
             onClick={handleExportPDF}
-            className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border uppercase tracking-wider relative ${
-              selectedIds.size > 0 
-                ? 'bg-rose-600 text-white border-rose-500 shadow-md shadow-rose-500/20' 
+            disabled={isExportingPdf}
+            className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border uppercase tracking-wider relative disabled:opacity-60 ${
+              selectedIds.size > 0
+                ? 'bg-rose-600 text-white border-rose-500 shadow-md shadow-rose-500/20'
                 : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
             }`}
             title={selectedIds.size > 0 ? `Exportar ${selectedIds.size} itens selecionados` : 'Exportar todos os filtrados'}
           >
-            <FileText className="w-3 h-3" />
-            <span>PDF</span>
+            {isExportingPdf ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
+            <span>{isExportingPdf ? 'Gerando...' : 'PDF'}</span>
             {selectedIds.size > 0 && (
               <span className="absolute -top-1.5 -right-1.5 bg-rose-900 text-[8px] px-1 rounded-full border border-white">
                 {selectedIds.size}
@@ -742,11 +752,12 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
                     <span>Excel</span>
                   </button>
                   <button
-                    onClick={() => exportToPDF(items.filter(i => selectedIds.has(i.id)))}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-[9px] font-black uppercase transition-all border border-rose-500/20"
+                    onClick={handleExportPDF}
+                    disabled={isExportingPdf}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-[9px] font-black uppercase transition-all border border-rose-500/20 disabled:opacity-60"
                   >
-                    <FileText className="w-3 h-3" />
-                    <span>PDF</span>
+                    {isExportingPdf ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
+                    <span>{isExportingPdf ? 'Gerando...' : 'PDF'}</span>
                   </button>
                 </div>
 

@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import { GoogleGenAI } from '@google/genai';
 import { pool, initDb, rowToItem, rowToUser } from './db.js';
 import { configureWebPush, getVapidPublicKey, sendPushToUser } from './push.js';
+import { generateRecolhimentoReportPdf, RecolhimentoRecord } from './recolhimentoReport.js';
 
 // Monta o app Express com todas as rotas de API, sem dar listen — usado tanto
 // pelo servidor local (server.ts, que ainda pluga o Vite/estático por cima)
@@ -378,6 +379,55 @@ export async function createApp() {
       );
     } catch (err) {
       console.error('Erro ao processar webhook ASAAS:', err);
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // Relatório em PDF (capa com KPIs/gráficos + tabelas por unidade) — roda
+  // no servidor via Puppeteer/Chromium (ver recolhimentoReport.ts),
+  // substitui o PDF simples que era montado no navegador com jsPDF. O
+  // cliente manda os itens já carregados/filtrados; nada é buscado no
+  // banco aqui, então requireDb/requireAuth servem só pra exigir sessão
+  // válida (evita qualquer um sem login gastar Chromium do servidor).
+  // ---------------------------------------------------------------------
+  app.post('/api/reports/pdf', requireDb, requireAuth, async (req, res) => {
+    try {
+      const items = Array.isArray(req.body?.items) ? req.body.items : [];
+      if (items.length === 0) {
+        return res.status(400).json({ error: 'Nenhum registro para gerar o relatório.' });
+      }
+
+      const records: RecolhimentoRecord[] = items.map((item: any) => ({
+        franquia: item.franquia || '',
+        cnpj: item.cnpj || '',
+        ccusto: item.cCusto || item.ccusto || '',
+        vencimento: item.vencimento || '',
+        vencOrig:
+          item.vencimentoOriginal && item.vencimentoOriginal !== item.vencimento
+            ? item.vencimentoOriginal
+            : undefined,
+        pagamento: item.dataPagamento && item.dataPagamento !== '-' ? item.dataPagamento : undefined,
+        valor: Number(item.valor) || 0,
+        status: item.status || 'Aguardando pagamento',
+        compRec: item.competenciaRecolhimento || '-',
+        compPag:
+          item.competenciaPagamento && item.competenciaPagamento !== '-'
+            ? item.competenciaPagamento
+            : undefined,
+        descricao: item.descricao || '',
+      }));
+
+      const pdf = await generateRecolhimentoReportPdf(records, {
+        title: typeof req.body?.title === 'string' ? req.body.title : undefined,
+        lede: typeof req.body?.lede === 'string' ? req.body.lede : undefined,
+      });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="relatorio-recolhimento.pdf"');
+      res.send(pdf);
+    } catch (err: any) {
+      console.error('[reports/pdf] Erro ao gerar PDF:', err);
+      res.status(500).json({ error: 'Erro ao gerar o relatório em PDF.', details: err.message });
     }
   });
 

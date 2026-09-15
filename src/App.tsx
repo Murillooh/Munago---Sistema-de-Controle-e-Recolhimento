@@ -529,6 +529,7 @@ export default function App() {
                 baseCategories={baseCategories}
                 onNavigateBases={() => setActiveTab('bases')}
                 searchTerm={searchTerm}
+                sessionToken={sessionToken}
               />
             )}
             {activeTab === 'bases' && (
@@ -544,7 +545,7 @@ export default function App() {
               />
             )}
             {activeTab === 'relatorios' && (
-              <ReportsView items={items} />
+              <ReportsView items={items} sessionToken={sessionToken} />
             )}
             {activeTab === 'metas' && (
               <MetasView
@@ -565,7 +566,7 @@ export default function App() {
           </div>
         </main>
       </div>
-      <ChatAssistant items={items} goalSettings={goalSettings} />
+      <ChatAssistant items={items} goalSettings={goalSettings} sessionToken={sessionToken} />
       <ConfirmDialog
         open={!!confirmState}
         message={confirmState?.message ?? ''}

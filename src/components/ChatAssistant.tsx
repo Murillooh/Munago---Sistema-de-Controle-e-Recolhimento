@@ -17,6 +17,7 @@ interface Message {
 interface ChatAssistantProps {
   items: RecolhimentoItem[];
   goalSettings: GoalSettings;
+  sessionToken: string | null;
 }
 
 // Manda um resumo em vez da lista inteira de lançamentos. Com a planilha
@@ -91,7 +92,7 @@ const STATUS_LABELS: Record<string, string> = {
   Atrasado: 'atrasados',
 };
 
-export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSettings }) => {
+export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSettings, sessionToken }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [input, setInput] = useState('');
@@ -204,7 +205,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
           }]);
         } else {
           const filename = `relatorio_${label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}.pdf`;
-          const blob = await exportToPDF(filtered, filename, undefined, { returnBlob: true }) as Blob;
+          const blob = await exportToPDF(filtered, filename, undefined, { returnBlob: true }, sessionToken) as Blob;
           const url = URL.createObjectURL(blob);
           objectUrlsRef.current.push(url);
           const total = filtered.reduce((s, i) => s + (i.valor || 0), 0);

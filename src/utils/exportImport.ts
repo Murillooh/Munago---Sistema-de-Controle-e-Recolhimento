@@ -1,6 +1,4 @@
 import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { RecolhimentoItem } from '../types';
 
 export function exportToExcel(data: RecolhimentoItem[], filename = 'controle_recolhimento.xlsx', visibleColumns?: string[]) {
@@ -38,141 +36,62 @@ export function exportToExcel(data: RecolhimentoItem[], filename = 'controle_rec
   XLSX.writeFile(workbook, filename);
 }
 
-async function getBase64ImageFromUrl(imageUrl: string): Promise<string | null> {
-  try {
-    const res = await fetch(imageUrl);
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch (error) {
-    console.error('Error loading image for PDF:', error);
-    return null;
-  }
-}
-
+// PDF gerado no servidor (Puppeteer, ver src/server/recolhimentoReport.ts):
+// capa com KPIs/gráficos + tabelas por unidade, em vez da lista simples que
+// o jsPDF montava aqui no navegador. Por isso virou async-de-rede: manda os
+// itens já carregados/filtrados pro back-end e recebe o PDF pronto de volta.
+//
+// `visibleColumns` não é mais usado pro PDF — o novo layout tem colunas
+// fixas (Franquia/CNPJ, Vencimento, Valor, Status, Pagamento, Descrição) e
+// agrupa por unidade automaticamente. Ficou só na assinatura pra não quebrar
+// quem ainda passa esse argumento; a seleção de colunas continua valendo
+// pra exportação em Excel.
 export async function exportToPDF(
   data: RecolhimentoItem[],
   filename = 'relatorio_recolhimento.pdf',
-  visibleColumns?: string[],
-  options?: { returnBlob?: boolean }
+  _visibleColumns?: string[],
+  options?: { returnBlob?: boolean },
+  sessionToken?: string | null
 ): Promise<Blob | void> {
+  if (data.length === 0) {
+    const msg = 'Nenhum registro para gerar o relatório.';
+    if (options?.returnBlob) throw new Error(msg);
+    alert(msg);
+    return;
+  }
+
   try {
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-
-    // Ícone da marca Munago (mesmo pin+check dourado do app) — antes carregava
-    // /logo.png, que era a arte de outra empresa (locaAgora) esquecida no projeto.
-    const logoBase64 = await getBase64ImageFromUrl('/logo-pdf.png');
-    if (logoBase64) {
-      try {
-        doc.addImage(logoBase64, 'PNG', 14, 8, 16, 16);
-      } catch (e) {
-        console.warn('Could not add logo as PNG, trying JPEG', e);
-        try {
-          doc.addImage(logoBase64, 'JPEG', 14, 8, 16, 16);
-        } catch (e2) {
-          console.error('Could not add logo to PDF', e2);
-        }
-      }
-    }
-
-    const textX = logoBase64 ? 34 : 14;
-
-    // Header Title: Munago
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.setTextColor(15, 23, 42); // #0f172a
-    doc.text('Munago', textX, 17);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(71, 85, 105); // slate-600
-    doc.text('Relatório de Controle de Recolhimento', textX, 23);
-
-    // Date & Total metadata on the right — preto em vez de cinza claro, melhora a leitura.
-    doc.setFontSize(9);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Gerado em: ${new Date().toLocaleDateString()} | Total de Registros: ${data.length}`, 283, 17, { align: 'right' });
-
-    // Subtle dividing line
-    doc.setDrawColor(226, 232, 240); // slate-200
-    doc.setLineWidth(0.5);
-    doc.line(14, 27, 283, 27);
-
-    // Complete mapping of all possible columns
-    const columnMapping: Record<string, string> = {
-      'franquia': 'Franquia',
-      'cnpj': 'CNPJ',
-      'cCusto': 'C. Custo',
-      'categoria': 'Categoria',
-      'dataCriacao': 'Criação',
-      'vencimento': 'Vencimento',
-      'vencimentoOriginal': 'Venc. Orig.',
-      'dataPagamento': 'Pagamento',
-      'valor': 'Valor (R$)',
-      'status': 'Status',
-      'competenciaRecolhimento': 'Comp. Rec.',
-      'competenciaPagamento': 'Comp. Pag.',
-      'descricao': 'Descrição',
-    };
-
-    // Filter columns based on visibleColumns if provided
-    const activeColumns = Object.entries(columnMapping)
-      .filter(([key]) => !visibleColumns || visibleColumns.includes(key));
-
-    if (activeColumns.length === 0) {
-      alert('Selecione pelo menos uma coluna para o relatório.');
-      return;
-    }
-
-    const tableColumn = activeColumns.map(([, label]) => label);
-
-    const tableRows = data.map(item => {
-      return activeColumns.map(([key]) => {
-        if (key === 'valor') {
-          return `R$ ${Number(item.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-        }
-        return (item as any)[key] || '-';
-      });
+    const res = await fetch('/api/reports/pdf', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+      },
+      body: JSON.stringify({ items: data }),
     });
 
-    autoTable(doc, {
-      startY: 32,
-      head: [tableColumn],
-      body: tableRows,
-      theme: 'grid',
-      headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold' },
-      styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
-      margin: { left: 14, right: 14 },
-    });
-
-    // Rodapé com o nome da marca em toda página — fecha o relatório com
-    // identidade visual, em vez de terminar na última linha da tabela.
-    const pageCount = doc.getNumberOfPages();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(100, 100, 100);
-      doc.text('Munago', 14, pageHeight - 8);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.error || `Servidor retornou ${res.status} ao gerar o PDF.`);
     }
 
-    if (options?.returnBlob) {
-      return doc.output('blob');
-    }
-    doc.save(filename);
+    const blob = await res.blob();
+    if (options?.returnBlob) return blob;
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   } catch (error) {
     console.error('Error generating PDF:', error);
     // Chamador com returnBlob (ex: chat) trata o erro por conta própria —
     // um alert() do navegador não faz sentido no meio de uma conversa.
     if (options?.returnBlob) throw error;
-    alert('Erro ao gerar o PDF. Verifique os dados e tente novamente.');
+    alert('Erro ao gerar o PDF. Verifique sua conexão e tente novamente.');
   }
 }
 

@@ -1,14 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { RecolhimentoItem } from '../types';
-import { FileText, Download, CheckSquare, Square, Calendar, Filter, ChevronRight, Layout, Trash2, Search } from 'lucide-react';
+import { FileText, Download, CheckSquare, Square, Calendar, Filter, ChevronRight, Layout, Trash2, Search, Loader2 } from 'lucide-react';
 import { exportToExcel, exportToPDF } from '../utils/exportImport';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ReportsViewProps {
   items: RecolhimentoItem[];
+  sessionToken: string | null;
 }
 
-export const ReportsView: React.FC<ReportsViewProps> = ({ items }) => {
+export const ReportsView: React.FC<ReportsViewProps> = ({ items, sessionToken }) => {
   // Columns state
   const ALL_COLUMNS = [
     { id: 'franquia', label: 'Franquia' },
@@ -87,11 +88,20 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ items }) => {
     exportToExcel(dataToExport, 'relatorio_personalizado.xlsx', selectedColumns);
   };
 
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  // Layout do PDF agora é fixo (capa + tabelas por unidade, gerado no
+  // servidor) — a seleção de colunas abaixo só se aplica ao Excel.
   const handleExportPDF = async () => {
-    const dataToExport = selectedRowIds.size > 0 
+    const dataToExport = selectedRowIds.size > 0
       ? filteredItems.filter(i => selectedRowIds.has(i.id))
       : filteredItems;
-    await exportToPDF(dataToExport, 'relatorio_personalizado.pdf', selectedColumns);
+    setIsExportingPdf(true);
+    try {
+      await exportToPDF(dataToExport, 'relatorio_personalizado.pdf', undefined, undefined, sessionToken);
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   const toggleRow = (id: string) => {
@@ -140,11 +150,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ items }) => {
           </button>
           <button
             onClick={handleExportPDF}
-            disabled={filteredItems.length === 0 || selectedColumns.length === 0}
+            disabled={filteredItems.length === 0 || isExportingPdf}
             className="flex items-center space-x-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-xs font-black transition-all shadow-lg shadow-rose-600/20 uppercase tracking-widest"
           >
-            <FileText className="w-4 h-4" />
-            <span>PDF</span>
+            {isExportingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+            <span>{isExportingPdf ? 'Gerando...' : 'PDF'}</span>
           </button>
         </div>
       </div>
