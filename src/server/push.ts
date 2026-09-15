@@ -77,52 +77,55 @@ const parseVencimento = (v: string): Date | null => {
   return isNaN(d.getTime()) ? null : d;
 };
 
-// Checa periodicamente lançamentos vencendo em até 2 dias ou já atrasados, e
-// manda um push por lançamento (no máximo um por dia, via push_alert_log).
-// É isso que faz o alerta chegar mesmo com o sistema fechado — o gatilho
-// mora aqui no servidor, não no navegador do usuário.
-export function startDeadlineAlertJob(pool: Pool, intervalMs = 30 * 60 * 1000) {
-  const check = async () => {
-    try {
-      const { rows: items } = await pool.query(
-        `SELECT id, franquia, valor, vencimento, status, owner_id
-         FROM recolhimentos
-         WHERE status IN ('Aguardando pagamento', 'Atrasado') AND owner_id IS NOT NULL`
+// Checa lançamentos vencendo em até 2 dias ou já atrasados, e manda um push
+// por lançamento (no máximo um por dia, via push_alert_log). Uma execução só
+// — quem dispara repetidamente é o chamador (setInterval no server.ts local,
+// ou o cron da Vercel em produção via /api/cron/check-deadlines).
+export async function runDeadlineAlertCheck(pool: Pool): Promise<void> {
+  try {
+    const { rows: items } = await pool.query(
+      `SELECT id, franquia, valor, vencimento, status, owner_id
+       FROM recolhimentos
+       WHERE status IN ('Aguardando pagamento', 'Atrasado') AND owner_id IS NOT NULL`
+    );
+
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+
+    for (const item of items) {
+      const due = parseVencimento(item.vencimento);
+      if (!due) continue;
+      const diffDays = (due.getTime() - now.getTime()) / (1000 * 3600 * 24);
+      if (diffDays > 2) continue; // ainda longe do vencimento
+
+      const already = await pool.query(
+        'SELECT 1 FROM push_alert_log WHERE item_id = $1 AND alert_date = $2',
+        [item.id, today]
       );
+      if (already.rows.length > 0) continue;
 
-      const now = new Date();
-      const today = now.toISOString().slice(0, 10);
+      const overdue = diffDays < 0 || item.status === 'Atrasado';
+      await sendPushToUser(pool, item.owner_id, {
+        title: overdue ? 'Munago — Recolhimento atrasado' : 'Munago — Recolhimento vencendo',
+        body: `${item.franquia}: R$ ${Number(item.valor).toFixed(2)} ${overdue ? 'está atrasado' : `vence em ${item.vencimento}`}.`,
+        tag: `prazo-${item.id}`,
+        url: '/',
+      });
 
-      for (const item of items) {
-        const due = parseVencimento(item.vencimento);
-        if (!due) continue;
-        const diffDays = (due.getTime() - now.getTime()) / (1000 * 3600 * 24);
-        if (diffDays > 2) continue; // ainda longe do vencimento
-
-        const already = await pool.query(
-          'SELECT 1 FROM push_alert_log WHERE item_id = $1 AND alert_date = $2',
-          [item.id, today]
-        );
-        if (already.rows.length > 0) continue;
-
-        const overdue = diffDays < 0 || item.status === 'Atrasado';
-        await sendPushToUser(pool, item.owner_id, {
-          title: overdue ? 'Munago — Recolhimento atrasado' : 'Munago — Recolhimento vencendo',
-          body: `${item.franquia}: R$ ${Number(item.valor).toFixed(2)} ${overdue ? 'está atrasado' : `vence em ${item.vencimento}`}.`,
-          tag: `prazo-${item.id}`,
-          url: '/',
-        });
-
-        await pool.query(
-          'INSERT INTO push_alert_log (item_id, alert_date) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-          [item.id, today]
-        );
-      }
-    } catch (err) {
-      console.error('[push] Erro ao checar prazos:', err);
+      await pool.query(
+        'INSERT INTO push_alert_log (item_id, alert_date) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [item.id, today]
+      );
     }
-  };
+  } catch (err) {
+    console.error('[push] Erro ao checar prazos:', err);
+  }
+}
 
-  check();
-  return setInterval(check, intervalMs);
+// Uso local (server.ts, processo de vida longa) — na Vercel um setInterval
+// não sobrevive entre invocações da função serverless, por isso lá o
+// gatilho é o cron (/api/cron/check-deadlines), não esta função.
+export function startDeadlineAlertJob(pool: Pool, intervalMs = 30 * 60 * 1000) {
+  runDeadlineAlertCheck(pool);
+  return setInterval(() => runDeadlineAlertCheck(pool), intervalMs);
 }

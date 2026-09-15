@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { GoogleGenAI } from '@google/genai';
 import { pool, initDb, rowToItem, rowToUser, rowToEstoqueItem } from './db.js';
-import { configureWebPush, getVapidPublicKey, sendPushToUser } from './push.js';
+import { configureWebPush, getVapidPublicKey, sendPushToUser, runDeadlineAlertCheck } from './push.js';
 import { generateRecolhimentoReportPdf, RecolhimentoRecord } from './recolhimentoReport.js';
 import { generateEstoqueReportPdf, EstoqueRecord } from './estoqueReport.js';
 
@@ -761,6 +761,27 @@ export async function createApp() {
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao enviar notificação de teste.', details: err.message });
     }
+  });
+
+  // Gatilho dos alertas de prazo em produção (Vercel): server.ts usa
+  // setInterval (processo de vida longa), mas a função serverless que serve
+  // munago.vercel.app não sobrevive entre requisições — sem isso, o job de
+  // alerta simplesmente NUNCA rodava lá, só localmente. Configurado como
+  // Vercel Cron (ver vercel.json) chamando esta rota periodicamente.
+  // CRON_SECRET é a variável que a própria Vercel injeta como Bearer token
+  // em cron jobs quando ela existe no projeto — sem configurar, a rota
+  // funciona sem checagem (pior caso é reenviar um push já enviado hoje,
+  // o que push_alert_log já impede de qualquer forma).
+  app.get('/api/cron/check-deadlines', async (req, res) => {
+    if (process.env.CRON_SECRET) {
+      const authHeader = req.headers.authorization || '';
+      if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+        return res.status(401).json({ error: 'Não autorizado.' });
+      }
+    }
+    if (!pool) return res.status(503).json({ error: 'Banco de dados não configurado.' });
+    await runDeadlineAlertCheck(pool);
+    res.json({ success: true });
   });
 
   // Gemini AI Setup
