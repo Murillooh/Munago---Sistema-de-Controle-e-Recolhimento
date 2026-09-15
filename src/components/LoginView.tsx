@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, Mail, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Lock, Mail, ArrowRight, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import { AuthUser } from '../types';
 
 interface LoginViewProps {
@@ -11,6 +11,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [infoMsg, setInfoMsg] = useState('');
@@ -200,7 +201,26 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           </div>
           <div>
             <label className="block text-[10px] font-black tracking-widest text-[#918f9a] mb-2 uppercase">Senha</label>
-            <input required minLength={mode === 'register' ? 6 : undefined} type="password" value={password} onChange={e => setPassword(e.target.value)} className="login-input w-full h-11 rounded-xl bg-white/5 border border-white/10 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white placeholder-white/30" placeholder="••••••••" />
+            <div className="relative">
+              <input
+                required
+                minLength={mode === 'register' ? 6 : undefined}
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="login-input w-full h-11 rounded-xl bg-white/5 border border-white/10 pl-4 pr-11 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white placeholder-white/30"
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                tabIndex={-1}
+                title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                className="absolute right-0 top-0 h-11 w-11 flex items-center justify-center text-white/40 hover:text-white/80 transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
           
           <div className="pt-2 space-y-3">
