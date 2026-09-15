@@ -92,6 +92,17 @@ const STATUS_LABELS: Record<string, string> = {
   Atrasado: 'atrasados',
 };
 
+// Atalhos exibidos na tela vazia do chat, antes da primeira mensagem — sem
+// isso a tela fica só com o "Olá Murillo!" e ninguém sabe o que perguntar.
+// Cobrem só os pedidos de PDF que o chat já resolve bem na hora (sem
+// depender da IA acertar uma pergunta livre).
+const SUGGESTIONS: string[] = [
+  'Gerar PDF dos atrasados',
+  'Gerar PDF dos recebidos',
+  'PDF dos 10 maiores aguardando pagamento',
+  'Gerar PDF dos confirmados',
+];
+
 export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSettings, sessionToken }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -154,10 +165,11 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
     };
   }, []);
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+  const handleSend = async (overrideText?: string) => {
+    const promptText = overrideText ?? input;
+    if (!promptText.trim() || isLoading) return;
 
-    const prompt = input;
+    const prompt = promptText;
     const userMessage: Message = { role: 'user', parts: [{ text: prompt }] };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
@@ -311,6 +323,18 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
                           Como posso ajudar você hoje? Posso analisar os recolhimentos, verificar metas ou dar recomendações estratégicas.
                         </p>
                       </div>
+                      <div className="flex flex-wrap justify-center gap-1.5 px-3 pt-1">
+                        {SUGGESTIONS.map((suggestion) => (
+                          <button
+                            key={suggestion}
+                            onClick={() => handleSend(suggestion)}
+                            disabled={isLoading}
+                            className="px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[9.5px] font-bold text-slate-600 dark:text-slate-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-50"
+                          >
+                            {suggestion}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                   {messages.map((msg, idx) => (
@@ -389,7 +413,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
                       </button>
                     )}
                     <button
-                      onClick={handleSend}
+                      onClick={() => handleSend()}
                       disabled={!input.trim() || isLoading}
                       className="absolute right-2 p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all shadow-md active:scale-95"
                     >
