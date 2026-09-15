@@ -222,9 +222,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         </form>
       </div>
 
-      <div className="absolute bottom-[18px] left-0 right-0 text-center text-[10.5px] tracking-[0.4px] text-[#918f9a] opacity-55 z-20">
-        céu animado · canvas · leve, sem custo de rede
-      </div>
     </div>
   );
 };
