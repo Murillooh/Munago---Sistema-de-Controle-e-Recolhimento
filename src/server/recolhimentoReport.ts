@@ -463,7 +463,7 @@ ${sectionsHtml}
 
 const REPORT_CSS = `
 @page {
-  size: A4 landscape;
+  size: 297mm 210mm;
   margin: 0;
 }
 
@@ -719,9 +719,15 @@ export async function generateRecolhimentoReportPdfWithBrowser(
     // silenciosamente pra páginas abertas via `newPage()`.
     await page.setViewport(PRINT_VIEWPORT);
     await page.setContent(html, { waitUntil: "load" });
+    // format+landscape (o que o código tinha antes) faz o Puppeteer calcular
+    // o tamanho da página sozinho em polegadas e converter — no Chromium
+    // "headless shell" do @sparticuz/chromium (produção/Vercel) isso saiu
+    // com uma folha maior que os 297x210mm do `.cover`, sobrando margem
+    // preenchida com a cor de fundo (`--paper`) em vez do conteúdo. Com
+    // preferCSSPageSize a página vem direto da regra `@page` do CSS acima —
+    // exatamente o mesmo valor usado no `.cover`, sem conversão duplicada.
     const pdf = await page.pdf({
-      format: "A4",
-      landscape: true,
+      preferCSSPageSize: true,
       printBackground: true,
       margin: { top: "0", bottom: "0", left: "0", right: "0" },
     });
