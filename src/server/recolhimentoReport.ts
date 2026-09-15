@@ -179,7 +179,15 @@ function descricaoHtml(desc: string): string {
   if (!rest) {
     return `<span class="desc-lead">${escapeHtml(lead)}</span>`;
   }
-  const rawChips = rest.includes(";") ? rest.split(";") : [rest];
+  // Sem ";" pra separar, muita descrição real ainda tem várias tickets
+  // seguidas só por espaço (ex: "UFD6F79 16/07/2026 R$ 150,00 UDG1G46
+  // 16/07/2026 R$ 150,00") — sem isso, virava um chip gigante só, sem
+  // quebra, que estourava a largura da célula (e por a tabela ficar na
+  // mesma "largura de documento" da capa, isso encolhia o relatório
+  // inteiro, capa incluída). Quebra antes de cada código de ticket
+  // (2-4 letras maiúsculas + dígito).
+  const TICKET_CODE_BOUNDARY = /\s+(?=[A-Z]{2,4}\d)/;
+  const rawChips = rest.includes(";") ? rest.split(";") : rest.split(TICKET_CODE_BOUNDARY);
   const chips: string[] = [];
   for (let c of rawChips) {
     c = c.replace(/^[\s\-;,]+|[\s\-;,]+$/g, "");
@@ -585,7 +593,7 @@ table.report-table { width: 100%; border-collapse: collapse; table-layout: fixed
   text-align: left; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.4px;
   color: var(--ink-soft); border-bottom: 1.5px solid var(--navy); padding: 5px 8px 5px; background: #eeece5;
 }
-.report-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 10.5px; }
+.report-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 10.5px; overflow: hidden; }
 .report-table tbody tr:nth-child(even) { background: #f2f1eb; }
 
 .col-franquia { width: 20%; }
@@ -606,10 +614,11 @@ th.col-valor { text-align: right; }
 .st-confirmed { background: var(--confirmed-bg); color: var(--confirmed-fg); }
 
 .desc-lead { color: var(--ink); }
-.desc-tickets { margin-top: 3px; display: flex; flex-wrap: wrap; gap: 3px; }
+.desc-tickets { margin-top: 3px; display: flex; flex-wrap: wrap; gap: 3px; max-width: 100%; overflow: hidden; }
 .ticket {
   font-family: 'SFMono-Regular', Consolas, monospace; font-size: 8.6px; color: #6b5410;
   background: #f5ecd4; border: 1px solid #e7d7a3; border-radius: 4px; padding: 1px 5px; white-space: nowrap;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis;
 }
 
 .footer-strip { display: flex; justify-content: space-between; font-size: 8.5px; color: var(--ink-faint); padding: 4mm 12mm 0; }
