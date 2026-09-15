@@ -27,6 +27,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { DynamicTable } from './DynamicTable';
 import { ConfirmDialog } from './ConfirmDialog';
 import { exportToExcel, exportToPDF, parseExcelFile } from '../utils/exportImport';
+import { findUnidadeForItem } from '../utils/unidades';
 import { Unidade, BaseCategory } from '../types';
 import {
   DndContext,
@@ -198,11 +199,9 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
     );
   };
 
-  const onlyDigits = (v: string) => (v || '').replace(/\D/g, '');
-
-  // Cada unidade tem sua própria chave ASAAS (Bases > Unidades); resolve pelo CNPJ do lançamento.
-  const findUnidadeApiKey = (item: RecolhimentoItem) =>
-    unidades.find((u) => onlyDigits(u.cnpj) && onlyDigits(u.cnpj) === onlyDigits(item.cnpj))?.asaasApiKey;
+  // Cada unidade tem sua própria chave ASAAS (Bases > Unidades); resolve por
+  // CNPJ, com fallback por nome da unidade x C. Custo (ver utils/unidades.ts).
+  const findUnidadeApiKey = (item: RecolhimentoItem) => findUnidadeForItem(unidades, item)?.asaasApiKey;
 
   const handleSyncAsaas = async () => {
     const pendingWithAsaas = items.filter(i => i.status === 'Aguardando pagamento' && i.asaasId);

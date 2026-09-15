@@ -1000,6 +1000,48 @@ export async function createApp() {
     }
   }
 
+  // Busca um cliente já cadastrado no ASAAS pelo CNPJ, pra pré-preencher a
+  // Cobrança Avulsa com o que já existe lá (e-mail, telefone, endereço) —
+  // sem isso o boleto sai só com nome+CNPJ e pode faltar dado que o ASAAS
+  // pede na hora de emitir de verdade.
+  app.post('/api/asaas/customer-lookup', async (req, res) => {
+    const { apiKey, sandbox, cnpj } = req.body || {};
+    if (!apiKey) return res.status(400).json({ error: 'Chave API ASAAS obrigatória.' });
+    const cpfCnpj = String(cnpj || '').replace(/\D/g, '');
+    if (!cpfCnpj) return res.status(400).json({ error: 'CNPJ obrigatório.' });
+
+    const baseUrl = sandbox ? 'https://sandbox.asaas.com/v3' : 'https://api.asaas.com/v3';
+    try {
+      const response = await fetch(`${baseUrl}/customers?cpfCnpj=${cpfCnpj}`, {
+        headers: { 'access_token': apiKey, 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) {
+        const error = await readAsaasError(response, 'Falha ao consultar cliente no ASAAS.');
+        return res.status(response.status).json({ found: false, error });
+      }
+      const data = await response.json();
+      const customer = data?.data?.[0];
+      if (!customer) return res.json({ found: false });
+      return res.json({
+        found: true,
+        customer: {
+          id: customer.id,
+          name: customer.name,
+          email: customer.email || '',
+          phone: customer.phone || '',
+          mobilePhone: customer.mobilePhone || '',
+          postalCode: customer.postalCode || '',
+          address: customer.address || '',
+          addressNumber: customer.addressNumber || '',
+          complement: customer.complement || '',
+          province: customer.province || '',
+        },
+      });
+    } catch (err: any) {
+      return res.status(502).json({ found: false, error: 'Falha ao comunicar com a API do ASAAS: ' + err.message });
+    }
+  });
+
   // Create ASAAS Charge (Cobrança) for Recolhimento
   app.post('/api/asaas/create-charge', async (req, res) => {
     const { apiKey, sandbox, chargeData, billingType } = req.body;
@@ -1019,31 +1061,54 @@ export async function createApp() {
     try {
       // Garante que o cliente exista no ASAAS antes de gerar a cobrança.
       // cpfCnpj só com dígitos — o ASAAS rejeita com máscara (00.000.000/0000-00).
-      const customerPayload = {
-        name: chargeData.franquia,
-        cpfCnpj: (chargeData.cnpj || '').replace(/\D/g, '') || '00000000000100',
-        email: 'financeiro@locgrupo.com.br',
-      };
+      const cpfCnpj = (chargeData.cnpj || '').replace(/\D/g, '') || '00000000000100';
 
-      const customerRes = await fetch(`${baseUrl}/customers`, {
-        method: 'POST',
-        headers: {
-          'access_token': token,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(customerPayload),
+      // Reaproveita o cadastro já existente no ASAAS pra esse CNPJ em vez de
+      // criar um novo toda vez — antes cada cobrança gerava um cliente
+      // duplicado, e qualquer e-mail/telefone/endereço já cadastrado lá era
+      // ignorado (o boleto saía só com nome+CNPJ).
+      const lookupRes = await fetch(`${baseUrl}/customers?cpfCnpj=${cpfCnpj}`, {
+        headers: { 'access_token': token, 'Content-Type': 'application/json' },
       });
+      const existingCustomer = lookupRes.ok ? (await lookupRes.json())?.data?.[0] : null;
 
-      // Antes, uma falha aqui usava um id de cliente FALSO ("cus_simulated_...")
-      // e seguia pro pagamento — que então falhava por cliente inexistente e
-      // caía no fallback simulado, devolvendo "sucesso" pro front sem cobrança
-      // real nenhuma ter sido criada. Agora erro de cliente já para tudo e
-      // devolve o motivo de verdade.
-      if (!customerRes.ok) {
-        const error = await readAsaasError(customerRes, 'Falha ao cadastrar cliente no ASAAS.');
-        return res.status(customerRes.status).json({ success: false, error });
+      let customerId: string;
+      if (existingCustomer) {
+        customerId = existingCustomer.id;
+      } else {
+        const customerPayload = {
+          name: chargeData.franquia,
+          cpfCnpj,
+          email: chargeData.email || 'financeiro@locgrupo.com.br',
+          phone: chargeData.phone || undefined,
+          mobilePhone: chargeData.mobilePhone || undefined,
+          postalCode: chargeData.postalCode || undefined,
+          address: chargeData.address || undefined,
+          addressNumber: chargeData.addressNumber || undefined,
+          complement: chargeData.complement || undefined,
+          province: chargeData.province || undefined,
+        };
+
+        const customerRes = await fetch(`${baseUrl}/customers`, {
+          method: 'POST',
+          headers: {
+            'access_token': token,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(customerPayload),
+        });
+
+        // Antes, uma falha aqui usava um id de cliente FALSO ("cus_simulated_...")
+        // e seguia pro pagamento — que então falhava por cliente inexistente e
+        // caía no fallback simulado, devolvendo "sucesso" pro front sem cobrança
+        // real nenhuma ter sido criada. Agora erro de cliente já para tudo e
+        // devolve o motivo de verdade.
+        if (!customerRes.ok) {
+          const error = await readAsaasError(customerRes, 'Falha ao cadastrar cliente no ASAAS.');
+          return res.status(customerRes.status).json({ success: false, error });
+        }
+        customerId = (await customerRes.json()).id;
       }
-      const customerId = (await customerRes.json()).id;
 
       // Create Payment (Cobrança)
       const paymentPayload = {

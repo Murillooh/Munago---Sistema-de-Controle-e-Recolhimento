@@ -8,11 +8,27 @@ import {
   QrCode,
   Building2,
   ShieldAlert,
+  ShieldCheck,
   Search,
   Zap,
   Plus,
   X,
 } from 'lucide-react';
+import { findUnidadeForItem } from '../utils/unidades';
+
+// Campos de cliente que o ASAAS aceita ao criar/cobrar (fora nome/CNPJ, que
+// já vêm da franquia) — buscados do cadastro existente pra "Cobrança Avulsa"
+// não sair faltando o que o ASAAS pede.
+interface AsaasCustomerInfo {
+  email: string;
+  phone: string;
+  mobilePhone: string;
+  postalCode: string;
+  address: string;
+  addressNumber: string;
+  complement: string;
+  province: string;
+}
 
 interface AsaasIntegrationViewProps {
   items: RecolhimentoItem[];
@@ -70,14 +86,17 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Resolve a unidade (e sua chave de API) que corresponde a um lançamento, via CNPJ.
-  const findUnidade = (item: RecolhimentoItem) =>
-    unidades.find((u) => onlyDigits(u.cnpj) && onlyDigits(u.cnpj) === onlyDigits(item.cnpj));
+  // Resolve a unidade (e sua chave de API) que corresponde a um lançamento —
+  // por CNPJ, com fallback por nome da unidade x C. Custo (ver utils/unidades.ts).
+  const findUnidade = (item: RecolhimentoItem) => findUnidadeForItem(unidades, item);
 
   // Devolve o motivo de erro em vez de já mostrar alert() — a geração em
   // lote precisa acumular os erros de vários itens numa mensagem só, não
   // interromper tudo no primeiro alert() como fazia o botão individual.
-  const generateCharge = async (item: RecolhimentoItem): Promise<{ ok: true } | { ok: false; error: string }> => {
+  const generateCharge = async (
+    item: RecolhimentoItem,
+    customerExtra?: Partial<AsaasCustomerInfo>
+  ): Promise<{ ok: true; invoiceUrl?: string } | { ok: false; error: string }> => {
     const unidade = findUnidade(item);
     const apiKey = unidade?.asaasApiKey;
     if (!apiKey) {
@@ -89,7 +108,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
       const res = await fetch('/api/asaas/create-charge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey, sandbox, billingType, chargeData: item }),
+        body: JSON.stringify({ apiKey, sandbox, billingType, chargeData: { ...item, ...customerExtra } }),
       });
       const data = await res.json();
       if (data.success) {
@@ -100,7 +119,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
         // invoiceUrl persiste no banco — sem isso o link só existia neste
         // estado local (generatedCharges) e sumia num F5.
         onUpdateItem({ ...item, asaasId: data.chargeId, asaasInvoiceUrl: data.invoiceUrl || undefined });
-        return { ok: true };
+        return { ok: true, invoiceUrl: data.invoiceUrl };
       }
       return { ok: false, error: `${item.franquia}: ${data.error || 'erro desconhecido'}` };
     } catch {
@@ -125,17 +144,49 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   const [showAdHocModal, setShowAdHocModal] = useState(false);
   const [adHocForm, setAdHocForm] = useState(EMPTY_AD_HOC_FORM);
   const [adHocGenerating, setAdHocGenerating] = useState(false);
+  // Cadastro do cliente já existente no ASAAS pra essa franquia (CNPJ) —
+  // 'idle' = nada buscado ainda, 'loading' = buscando, 'found'/'not-found' =
+  // resultado da consulta. É o que garante que o boleto saia com e-mail/
+  // telefone/endereço já cadastrados, sem faltar nada.
+  const [customerLookup, setCustomerLookup] = useState<
+    { status: 'idle' } | { status: 'loading' } | { status: 'found'; customer: AsaasCustomerInfo } | { status: 'not-found' } | { status: 'error'; error: string }
+  >({ status: 'idle' });
+  const [adHocResult, setAdHocResult] = useState<{ invoiceUrl?: string } | null>(null);
 
   const openAdHocModal = () => {
     setAdHocForm(EMPTY_AD_HOC_FORM);
+    setCustomerLookup({ status: 'idle' });
+    setAdHocResult(null);
     setShowAdHocModal(true);
   };
 
   const adHocUnidade = unidades.find((u) => u.id === adHocForm.unidadeId);
 
-  const handleAdHocUnidadeChange = (unidadeId: string) => {
+  const handleAdHocUnidadeChange = async (unidadeId: string) => {
     const u = unidades.find((x) => x.id === unidadeId);
     setAdHocForm((prev) => ({ ...prev, unidadeId, cCusto: u?.cCustoPadrao || prev.cCusto }));
+    setAdHocResult(null);
+
+    if (!u?.asaasApiKey || !u.cnpj) {
+      setCustomerLookup({ status: 'idle' });
+      return;
+    }
+    setCustomerLookup({ status: 'loading' });
+    try {
+      const res = await fetch('/api/asaas/customer-lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: u.asaasApiKey, sandbox, cnpj: u.cnpj }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCustomerLookup({ status: 'error', error: data.error || 'Falha ao consultar cliente no ASAAS.' });
+        return;
+      }
+      setCustomerLookup(data.found ? { status: 'found', customer: data.customer } : { status: 'not-found' });
+    } catch {
+      setCustomerLookup({ status: 'error', error: 'Falha ao comunicar com a API do ASAAS.' });
+    }
   };
 
   const handleGenerateAdHoc = async () => {
@@ -164,11 +215,16 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
     setAdHocGenerating(true);
     try {
       onAddItem(newItem);
+      // O servidor já busca o cliente por CNPJ e reaproveita e-mail/telefone/
+      // endereço cadastrados no ASAAS (ver customerLookup só pra mostrar isso
+      // aqui antes de gerar) — só cria cliente novo se realmente não existir.
       const result = await generateCharge(newItem);
       if (result.ok === false) {
         alert(`Lançamento adicionado à Planilha, mas a cobrança falhou: ${result.error}\n\nPode tentar gerar de novo na lista abaixo.`);
+        setShowAdHocModal(false);
+      } else {
+        setAdHocResult({ invoiceUrl: result.invoiceUrl });
       }
-      setShowAdHocModal(false);
     } finally {
       setAdHocGenerating(false);
     }
@@ -467,6 +523,39 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
               </button>
             </div>
 
+            {adHocResult ? (
+              <div className="p-6 space-y-4">
+                <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 rounded-xl flex items-start gap-3">
+                  <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">Cobrança gerada no ASAAS</p>
+                    <p className="text-xs text-emerald-700/80 dark:text-emerald-400/80 mt-0.5">
+                      Lançamento criado na Planilha. Abra a fatura pra conferir o boleto/Pix antes de enviar pro cliente.
+                    </p>
+                  </div>
+                </div>
+
+                {adHocResult.invoiceUrl && (
+                  <a
+                    href={adHocResult.invoiceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-emerald-600 text-white font-black rounded-xl text-xs hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 uppercase tracking-widest"
+                  >
+                    <span>Abrir Fatura no ASAAS</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowAdHocModal(false)}
+                  className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold rounded-xl text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                >
+                  Concluir
+                </button>
+              </div>
+            ) : (
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Franquia (Unidade)</label>
@@ -485,6 +574,39 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                 )}
                 {adHocUnidade && !adHocUnidade.asaasApiKey && (
                   <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-1">Sem chave ASAAS configurada para esta unidade (Bases &gt; Unidades).</p>
+                )}
+
+                {customerLookup.status === 'loading' && (
+                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500 font-semibold mt-2">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Consultando cadastro do cliente no ASAAS...</span>
+                  </div>
+                )}
+                {customerLookup.status === 'found' && (
+                  <div className="mt-2 p-2.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 rounded-xl text-[10px] text-emerald-800 dark:text-emerald-300 flex items-start gap-2">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold">Cliente já cadastrado no ASAAS — boleto sai com esses dados</p>
+                      <p className="mt-0.5 text-emerald-700/80 dark:text-emerald-400/80">
+                        {customerLookup.customer.email || 'sem e-mail'} • {customerLookup.customer.mobilePhone || customerLookup.customer.phone || 'sem telefone'} •{' '}
+                        {customerLookup.customer.address
+                          ? `${customerLookup.customer.address}, ${customerLookup.customer.addressNumber || 's/n'}`
+                          : 'sem endereço cadastrado'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {customerLookup.status === 'not-found' && (
+                  <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400 font-bold">
+                    <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                    <span>Nenhum cadastro encontrado — um cliente novo será criado no ASAAS só com nome e CNPJ.</span>
+                  </div>
+                )}
+                {customerLookup.status === 'error' && (
+                  <div className="mt-2 flex items-center gap-1.5 text-[10px] text-rose-600 dark:text-rose-400 font-bold">
+                    <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                    <span>{customerLookup.error}</span>
+                  </div>
                 )}
               </div>
 
@@ -553,6 +675,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                 </button>
               </div>
             </div>
+            )}
           </div>
         </div>
       )}
