@@ -34,6 +34,20 @@ export interface GoalSettings {
 
 export type ActiveTab = 'dashboard' | 'tabela' | 'metas' | 'notificacoes' | 'asaas' | 'bases' | 'relatorios' | 'usuarios' | 'estoque';
 
+// Abas que o admin pode liberar/bloquear por usuário. Fora da lista de
+// propósito: "dashboard" (sempre liberado — é a tela de pouso, ninguém pode
+// ficar sem nenhuma aba acessível) e "usuarios" (sempre admin-only, nunca
+// configurável). Ver canAccessTab em src/utils/permissions.ts.
+export const PERMISSION_TABS: { id: ActiveTab; label: string }[] = [
+  { id: 'tabela', label: 'Planilha' },
+  { id: 'metas', label: 'Metas' },
+  { id: 'estoque', label: 'Estoque' },
+  { id: 'relatorios', label: 'Relatórios' },
+  { id: 'asaas', label: 'ASAAS' },
+  { id: 'bases', label: 'Bases' },
+  { id: 'notificacoes', label: 'Notificações' },
+];
+
 // Um item do inventário físico de peças (Controle de Estoque). "Diferença"
 // (qtdFisico - qtdVision) e "valor" da diferença nunca ficam salvos — são
 // sempre calculados na hora, igual todo outro total do sistema.
@@ -63,6 +77,10 @@ export interface AuthUser {
   role: 'admin' | 'user';
   status: 'pending' | 'approved' | 'rejected';
   createdAt?: string;
+  // null/undefined = acesso a todas as abas (padrão pra admin e pra quem
+  // nunca teve permissão restringida). Array = lista explícita de abas
+  // liberadas pro usuário — ver PERMISSION_TABS e canAccessTab().
+  allowedTabs?: ActiveTab[] | null;
 }
 
 export interface Unidade {

@@ -139,6 +139,14 @@ export async function createApp() {
     res.json({ success: true });
   });
 
+  // Reconsulta o próprio perfil (role/status/allowedTabs). Sem isso, quando
+  // o admin muda a permissão de alguém já logado, essa pessoa só veria o
+  // efeito no próximo login — o front chama isto periodicamente pra refletir
+  // a mudança na sessão aberta.
+  app.get('/api/auth/me', requireAuth, async (req, res) => {
+    res.json(rowToUser((req as any).authUser));
+  });
+
   // Lista de usuários pra tela de aprovação (admin only).
   app.get('/api/admin/users', requireAdmin, async (req, res) => {
     try {
@@ -149,18 +157,41 @@ export async function createApp() {
     }
   });
 
-  // Aprova, rejeita ou promove um usuário (admin only).
+  // Abas que o admin pode liberar/bloquear por usuário. Fora da lista:
+  // "dashboard" (sempre liberado) e "usuarios" (sempre admin-only, nunca
+  // configurável) — ver PERMISSION_TABS/canAccessTab no front, src/types.ts
+  // e src/utils/permissions.ts.
+  const VALID_PERMISSION_TABS = ['tabela', 'metas', 'notificacoes', 'asaas', 'bases', 'relatorios', 'estoque'];
+
+  // Aprova, rejeita, promove ou ajusta as permissões de abas de um usuário
+  // (admin only).
   app.put('/api/admin/users/:id', requireAdmin, async (req, res) => {
     try {
-      const { status, role } = req.body || {};
+      const { status, role, allowedTabs } = req.body || {};
       const validStatus = ['pending', 'approved', 'rejected'];
       const validRole = ['admin', 'user'];
       if (status && !validStatus.includes(status)) return res.status(400).json({ error: 'Status inválido.' });
       if (role && !validRole.includes(role)) return res.status(400).json({ error: 'Papel inválido.' });
 
+      let allowedTabsJson: string | null | undefined; // undefined = não mexe na coluna
+      if (allowedTabs !== undefined) {
+        if (allowedTabs === null) {
+          allowedTabsJson = null; // libera acesso total de novo
+        } else {
+          if (!Array.isArray(allowedTabs) || allowedTabs.some((t: any) => !VALID_PERMISSION_TABS.includes(t))) {
+            return res.status(400).json({ error: 'Lista de permissões inválida.' });
+          }
+          allowedTabsJson = JSON.stringify(allowedTabs);
+        }
+      }
+
       const result = await pool!.query(
-        `UPDATE users SET status = COALESCE($1, status), role = COALESCE($2, role) WHERE id = $3 RETURNING *`,
-        [status || null, role || null, req.params.id]
+        `UPDATE users SET
+           status = COALESCE($1, status),
+           role = COALESCE($2, role),
+           allowed_tabs = CASE WHEN $3::boolean THEN $4::jsonb ELSE allowed_tabs END
+         WHERE id = $5 RETURNING *`,
+        [status || null, role || null, allowedTabsJson !== undefined, allowedTabsJson ?? null, req.params.id]
       );
       if (result.rows.length === 0) return res.status(404).json({ error: 'Usuário não encontrado.' });
       res.json(rowToUser(result.rows[0]));

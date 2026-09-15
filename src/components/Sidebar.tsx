@@ -26,6 +26,7 @@ import {
   Boxes,
 } from 'lucide-react';
 import { exportToExcel, exportToPDF } from '../utils/exportImport';
+import { canAccessTab } from '../utils/permissions';
 
 // Contato de suporte. WhatsApp só com dígitos (DDI+DDD+número), formato
 // que o link wa.me espera.
@@ -143,6 +144,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {!isCollapsed && <span>Dashboard</span>}
           </button>
 
+          {canAccessTab(currentUser, 'tabela') && (
           <button
             onClick={() => {
               setActiveTab('tabela');
@@ -160,7 +162,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <FileSpreadsheet className="w-4 h-4" />
             {!isCollapsed && <span>Planilha</span>}
           </button>
+          )}
 
+          {canAccessTab(currentUser, 'bases') && (
           <button
             onClick={() => {
               setActiveTab('bases');
@@ -178,7 +182,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Database className="w-4 h-4" />
             {!isCollapsed && <span>Bases</span>}
           </button>
+          )}
 
+          {canAccessTab(currentUser, 'metas') && (
           <button
             onClick={() => {
               setActiveTab('metas');
@@ -196,7 +202,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Target className="w-4 h-4" />
             {!isCollapsed && <span>Metas</span>}
           </button>
+          )}
 
+          {canAccessTab(currentUser, 'notificacoes') && (
           <button
             onClick={() => {
               setActiveTab('notificacoes');
@@ -224,7 +232,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full border border-white dark:border-slate-900" />
             )}
           </button>
+          )}
 
+          {canAccessTab(currentUser, 'asaas') && (
           <button
             onClick={() => {
               setActiveTab('asaas');
@@ -242,7 +252,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <CreditCard className={`w-4 h-4 ${isCollapsed ? 'text-emerald-400' : 'text-emerald-400'}`} />
             {!isCollapsed && <span>Banco ASAAS</span>}
           </button>
+          )}
 
+          {canAccessTab(currentUser, 'relatorios') && (
           <button
             onClick={() => {
               setActiveTab('relatorios');
@@ -260,7 +272,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <FileBarChart className="w-4 h-4" />
             {!isCollapsed && <span>Relatórios</span>}
           </button>
+          )}
 
+          {canAccessTab(currentUser, 'estoque') && (
           <button
             onClick={() => {
               setActiveTab('estoque');
@@ -278,6 +292,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Boxes className="w-4 h-4" />
             {!isCollapsed && <span>Estoque</span>}
           </button>
+          )}
 
           {currentUser?.role === 'admin' && (
             <button

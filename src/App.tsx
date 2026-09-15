@@ -22,6 +22,7 @@ import { motion } from 'motion/react';
 import { Menu, Bell, Download, FileText, Plus, Sun, Moon, HelpCircle, Database, FileBarChart, Search, Undo2 } from 'lucide-react';
 import { exportToExcel, exportToPDF } from './utils/exportImport';
 import { INITIAL_UNIDADES, INITIAL_BASE_CATEGORIES } from './data/initialBases';
+import { canAccessTab } from './utils/permissions';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -341,6 +342,49 @@ export default function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, sessionToken]);
+
+  // Reconsulta o próprio perfil periodicamente — é o que faz uma mudança de
+  // permissão feita pelo admin (allowedTabs/role) valer pra quem já está
+  // logado, sem precisar deslogar e logar de novo.
+  useEffect(() => {
+    if (!isAuthenticated || !sessionToken) return;
+    let cancelled = false;
+
+    const refreshProfile = async () => {
+      try {
+        const res = await fetch('/api/auth/me', { headers: itemsAuthHeaders() });
+        if (res.ok) {
+          const user = await res.json();
+          if (!cancelled) {
+            setCurrentUser(user);
+            localStorage.setItem('locgrupo_session', JSON.stringify({ user, token: sessionToken }));
+          }
+        } else if (res.status === 401 && !cancelled) {
+          handleLogout();
+        }
+      } catch {
+        // API indisponível: mantém a sessão local como está.
+      }
+    };
+
+    const interval = setInterval(refreshProfile, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, sessionToken]);
+
+  // Se a permissão mudou e a aba atual não é mais permitida, cai pro
+  // Dashboard (sempre liberado) em vez de deixar uma tela que o usuário não
+  // devia mais ver.
+  useEffect(() => {
+    if (!currentUser) return;
+    if (!canAccessTab(currentUser, activeTab)) {
+      setActiveTab('dashboard');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, activeTab]);
 
   const handleAddEstoqueItem = (newItem: EstoqueItem) => {
     setEstoqueItems((prev) => [newItem, ...prev]);
@@ -694,7 +738,7 @@ export default function App() {
                 searchTerm={searchTerm}
               />
             )}
-            {activeTab === 'tabela' && (
+            {activeTab === 'tabela' && canAccessTab(currentUser, 'tabela') && (
               <TableManagerView
                 ref={tableManagerRef}
                 items={items}
@@ -711,7 +755,7 @@ export default function App() {
                 initialStatusFilter={pendingStatusFilter}
               />
             )}
-            {activeTab === 'bases' && (
+            {activeTab === 'bases' && canAccessTab(currentUser, 'bases') && (
               <BasesManagerView
                 unidades={unidades}
                 categorias={baseCategories}
@@ -723,26 +767,26 @@ export default function App() {
                 onDeleteCategoria={(id) => askConfirm('Excluir esta categoria? Essa ação não pode ser desfeita.', () => setBaseCategories(prev => prev.filter(item => item.id !== id)))}
               />
             )}
-            {activeTab === 'relatorios' && (
+            {activeTab === 'relatorios' && canAccessTab(currentUser, 'relatorios') && (
               <ReportsView items={items} sessionToken={sessionToken} />
             )}
-            {activeTab === 'metas' && (
+            {activeTab === 'metas' && canAccessTab(currentUser, 'metas') && (
               <MetasView
                 goalSettings={goalSettings}
                 onUpdateGoalSettings={setGoalSettings}
                 items={items}
               />
             )}
-            {activeTab === 'notificacoes' && (
+            {activeTab === 'notificacoes' && canAccessTab(currentUser, 'notificacoes') && (
               <NotificationsView items={items} goalSettings={goalSettings} searchTerm={searchTerm} sessionToken={sessionToken} />
             )}
-            {activeTab === 'asaas' && (
+            {activeTab === 'asaas' && canAccessTab(currentUser, 'asaas') && (
               <AsaasIntegrationView items={items} unidades={unidades} onUpdateItem={handleUpdateItem} />
             )}
             {activeTab === 'usuarios' && currentUser?.role === 'admin' && (
               <AdminUsersView sessionToken={sessionToken} currentUserId={currentUser.id} />
             )}
-            {activeTab === 'estoque' && (
+            {activeTab === 'estoque' && canAccessTab(currentUser, 'estoque') && (
               <EstoqueView
                 items={estoqueItems}
                 onAddItem={handleAddEstoqueItem}
