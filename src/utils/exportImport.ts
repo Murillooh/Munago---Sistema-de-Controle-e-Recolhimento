@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { RecolhimentoItem } from '../types';
+import { RecolhimentoItem, EstoqueItem } from '../types';
 
 export function exportToExcel(data: RecolhimentoItem[], filename = 'controle_recolhimento.xlsx', visibleColumns?: string[]) {
   const columnMapping: Record<string, string> = {
@@ -229,6 +229,144 @@ export function parseExcelFile(file: File): Promise<RecolhimentoItem[]> {
             competenciaRecolhimento: formatCompetencia(at('competenciaRecolhimento', 9, r)) || 'atual',
             competenciaPagamento: formatCompetencia(at('competenciaPagamento', 10, r)),
             descricao: String(at('descricao', 11, r) || ''),
+          });
+        }
+
+        resolve(rows);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = (error) => reject(error);
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ============================================================================
+// Controle de Estoque
+// ============================================================================
+
+export function exportEstoqueToExcel(data: EstoqueItem[], filename = 'controle_estoque.xlsx') {
+  const worksheetData = data.map((item) => ({
+    'CÓD.': item.codigo,
+    'DESCRIÇÃO / PEÇA': item.descricao,
+    'MARCA': item.marca,
+    'ENDEREÇAMENTO': item.endereco,
+    'UNIDADE': item.unidade,
+    'CUSTO': item.custo,
+    'VENDA': item.venda,
+    'STATUS': item.status,
+    'QTD VISION': item.qtdVision,
+    'QTD FÍSICO': item.qtdFisico,
+    'DIFERENÇA': item.qtdFisico - item.qtdVision,
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Estoque');
+  XLSX.writeFile(workbook, filename);
+}
+
+// Mesma lógica de detecção de cabeçalho/aba do parseExcelFile, adaptada
+// pra planilha de inventário (ex: "Inventário Santa Cruz"). A aba usada é
+// sempre a mais completa (a "Detalhado"/geral) — "Sobras" e "Faltas" nessas
+// planilhas de origem são só o mesmo dado filtrado à mão por quem exportou,
+// e a diferença entre elas nem sempre bate (conferido num caso real); o
+// sistema recalcula sobra/falta sozinho a partir da diferença, não confia
+// nessas abas.
+export function parseEstoqueExcelFile(file: File): Promise<EstoqueItem[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+
+        const normalizeHeader = (v: any) =>
+          String(v ?? '')
+            .normalize('NFD')
+            .replace(/[̀-ͯ]/g, '') // remove acentos
+            .trim()
+            .toUpperCase();
+
+        const HEADER_ALIASES: Record<string, keyof EstoqueItem> = {
+          'COD.': 'codigo',
+          'CODIGO': 'codigo',
+          'COD': 'codigo',
+          'DESCRICAO / PECA': 'descricao',
+          'DESCRICAO/PECA': 'descricao',
+          'DESCRICAO': 'descricao',
+          'PECA': 'descricao',
+          'MARCA': 'marca',
+          'ENDERECAMENTO': 'endereco',
+          'ENDERECO': 'endereco',
+          'UNIDADE': 'unidade',
+          'UN': 'unidade',
+          'CUSTO': 'custo',
+          'VENDA': 'venda',
+          'STATUS': 'status',
+          'QTD VISION': 'qtdVision',
+          'QUANTIDADE VISION': 'qtdVision',
+        };
+
+        // "QTD FÍSICO (INVENTÁRIO) 10/09/2026" — a data no fim muda a cada
+        // planilha, não dá pra casar exato; qualquer cabeçalho começando com
+        // "QTD FISICO" (ou "QTD FISICO (INVENTARIO)") é essa coluna.
+        const matchHeader = (normalized: string): keyof EstoqueItem | undefined => {
+          if (HEADER_ALIASES[normalized]) return HEADER_ALIASES[normalized];
+          if (normalized.startsWith('QTD FISICO') || normalized.startsWith('QUANTIDADE FISICO')) return 'qtdFisico';
+          return undefined;
+        };
+
+        const buildColIndex = (headerRow: any[]) => {
+          const idx: Partial<Record<keyof EstoqueItem, number>> = {};
+          headerRow.forEach((cell, i) => {
+            const field = matchHeader(normalizeHeader(cell));
+            if (field && idx[field] === undefined) idx[field] = i;
+          });
+          return idx;
+        };
+
+        // Entre várias abas (Detalhado/Sobras/Faltas), usa a PRIMEIRA cujo
+        // cabeçalho tem "DESCRIÇÃO" reconhecível — normalmente é a mais
+        // completa. Se quiser forçar uma aba específica, dá pra deixar só
+        // ela no arquivo antes de importar.
+        let json: any[] = [];
+        let colIndex: Partial<Record<keyof EstoqueItem, number>> = {};
+        for (const sheetName of workbook.SheetNames) {
+          const candidateJson = XLSX.utils.sheet_to_json<any>(workbook.Sheets[sheetName], { header: 1 });
+          const candidateColIndex = buildColIndex((candidateJson[0] as any[]) || []);
+          if (candidateColIndex.descricao !== undefined) {
+            json = candidateJson;
+            colIndex = candidateColIndex;
+            break;
+          }
+          if (json.length === 0) json = candidateJson;
+        }
+
+        const hasHeaders = colIndex.descricao !== undefined;
+        const at = (field: keyof EstoqueItem, fallbackIdx: number, r: any[]) =>
+          r[hasHeaders ? colIndex[field] ?? -1 : fallbackIdx];
+
+        const rows: EstoqueItem[] = [];
+        for (let i = 1; i < json.length; i++) {
+          const r = json[i] as any[];
+          const descricaoCell = at('descricao', 1, r);
+          if (!r || r.length === 0 || !descricaoCell) continue;
+
+          const codigoRaw = at('codigo', 0, r);
+          rows.push({
+            id: `imported-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
+            codigo: codigoRaw && String(codigoRaw) !== '-' ? String(codigoRaw) : '',
+            descricao: String(descricaoCell || '').trim(),
+            marca: String(at('marca', 2, r) || '').trim(),
+            endereco: String(at('endereco', 3, r) || '').trim(),
+            unidade: String(at('unidade', 4, r) || 'UN').trim(),
+            custo: Number(at('custo', 5, r)) || 0,
+            venda: Number(at('venda', 6, r)) || 0,
+            status: (String(at('status', 7, r) || 'Ativo').trim() === 'Inativo' ? 'Inativo' : 'Ativo'),
+            qtdVision: Number(at('qtdVision', 8, r)) || 0,
+            qtdFisico: Number(at('qtdFisico', 9, r)) || 0,
           });
         }
 

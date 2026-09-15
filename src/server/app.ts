@@ -3,7 +3,7 @@ import express from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { GoogleGenAI } from '@google/genai';
-import { pool, initDb, rowToItem, rowToUser } from './db.js';
+import { pool, initDb, rowToItem, rowToUser, rowToEstoqueItem } from './db.js';
 import { configureWebPush, getVapidPublicKey, sendPushToUser } from './push.js';
 import { generateRecolhimentoReportPdf, RecolhimentoRecord } from './recolhimentoReport.js';
 
@@ -382,6 +382,155 @@ export async function createApp() {
       res.json({ success: true, count: result.rowCount });
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao excluir lançamentos em lote.', details: err.message });
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // Controle de Estoque — mesmo padrão de /api/items (dono por sessão,
+  // import em lote em chunks, etc), só que pra EstoqueItem em vez de
+  // RecolhimentoItem.
+  // ---------------------------------------------------------------------
+  app.get('/api/estoque', requireDb, requireAuth, async (req, res) => {
+    try {
+      const ownerId = (req as any).authUser.id;
+      const result = await pool!.query(
+        'SELECT * FROM estoque_items WHERE owner_id = $1 ORDER BY descricao ASC',
+        [ownerId]
+      );
+      res.json(result.rows.map(rowToEstoqueItem));
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao buscar itens de estoque.', details: err.message });
+    }
+  });
+
+  const insertEstoqueQuery = `
+    INSERT INTO estoque_items (
+      id, codigo, descricao, marca, endereco, unidade, custo, venda, status,
+      qtd_vision, qtd_fisico, owner_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+    ON CONFLICT (id) DO NOTHING
+    RETURNING *;
+  `;
+  const updateEstoqueQuery = `
+    UPDATE estoque_items SET
+      codigo = $2, descricao = $3, marca = $4, endereco = $5, unidade = $6,
+      custo = $7, venda = $8, status = $9, qtd_vision = $10, qtd_fisico = $11
+    WHERE id = $1 AND owner_id = $12
+    RETURNING *;
+  `;
+  const estoqueToParams = (item: any, ownerId: string) => [
+    item.id,
+    item.codigo || '',
+    item.descricao || '',
+    item.marca || '',
+    item.endereco || '',
+    item.unidade || 'UN',
+    Number(item.custo) || 0,
+    Number(item.venda) || 0,
+    item.status || 'Ativo',
+    Number(item.qtdVision) || 0,
+    Number(item.qtdFisico) || 0,
+    ownerId,
+  ];
+
+  app.post('/api/estoque', requireDb, requireAuth, async (req, res) => {
+    try {
+      const ownerId = (req as any).authUser.id;
+      const result = await pool!.query(insertEstoqueQuery, estoqueToParams(req.body, ownerId));
+      if (result.rows.length === 0) {
+        return res.status(409).json({ error: 'Já existe um item de estoque com este id.' });
+      }
+      res.json(rowToEstoqueItem(result.rows[0]));
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao salvar item de estoque.', details: err.message });
+    }
+  });
+
+  const ESTOQUE_COLUMNS = [
+    'id', 'codigo', 'descricao', 'marca', 'endereco', 'unidade', 'custo', 'venda', 'status',
+    'qtd_vision', 'qtd_fisico', 'owner_id',
+  ];
+
+  async function insertEstoqueBatch(items: any[], ownerId: string) {
+    const inserted: any[] = [];
+    const client = await pool!.connect();
+    try {
+      await client.query('BEGIN');
+      for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+        const chunk = items.slice(i, i + CHUNK_SIZE);
+        const values: any[] = [];
+        const tuples = chunk.map((item, rowIdx) => {
+          const params = estoqueToParams(item, ownerId);
+          values.push(...params);
+          const base = rowIdx * ESTOQUE_COLUMNS.length;
+          return `(${ESTOQUE_COLUMNS.map((_, colIdx) => `$${base + colIdx + 1}`).join(',')})`;
+        });
+        const result = await client.query(
+          `INSERT INTO estoque_items (${ESTOQUE_COLUMNS.join(',')})
+           VALUES ${tuples.join(',')}
+           ON CONFLICT (id) DO NOTHING
+           RETURNING *`,
+          values
+        );
+        inserted.push(...result.rows);
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+    return inserted;
+  }
+
+  app.post('/api/estoque/bulk', requireDb, requireAuth, async (req, res) => {
+    const items = Array.isArray(req.body) ? req.body : [];
+    const ownerId = (req as any).authUser.id;
+    try {
+      const inserted = await insertEstoqueBatch(items, ownerId);
+      res.json({ success: true, count: inserted.length, items: inserted.map(rowToEstoqueItem) });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao importar itens de estoque em lote.', details: err.message });
+    }
+  });
+
+  app.put('/api/estoque/:id', requireDb, requireAuth, async (req, res) => {
+    try {
+      const ownerId = (req as any).authUser.id;
+      const params = estoqueToParams({ ...req.body, id: req.params.id }, ownerId);
+      const result = await pool!.query(updateEstoqueQuery, params);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Item de estoque não encontrado.' });
+      }
+      res.json(rowToEstoqueItem(result.rows[0]));
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao atualizar item de estoque.', details: err.message });
+    }
+  });
+
+  app.delete('/api/estoque/:id', requireDb, requireAuth, async (req, res) => {
+    try {
+      const ownerId = (req as any).authUser.id;
+      await pool!.query('DELETE FROM estoque_items WHERE id = $1 AND owner_id = $2', [req.params.id, ownerId]);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao excluir item de estoque.', details: err.message });
+    }
+  });
+
+  app.post('/api/estoque/delete-bulk', requireDb, requireAuth, async (req, res) => {
+    try {
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      if (ids.length === 0) return res.json({ success: true, count: 0 });
+      const ownerId = (req as any).authUser.id;
+      const result = await pool!.query(
+        'DELETE FROM estoque_items WHERE id = ANY($1) AND owner_id = $2 RETURNING id',
+        [ids, ownerId]
+      );
+      res.json({ success: true, count: result.rowCount });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao excluir itens de estoque em lote.', details: err.message });
     }
   });
 

@@ -32,7 +32,24 @@ export interface GoalSettings {
   detailedGoals?: DetailedGoal[];
 }
 
-export type ActiveTab = 'dashboard' | 'tabela' | 'metas' | 'notificacoes' | 'asaas' | 'bases' | 'relatorios' | 'usuarios';
+export type ActiveTab = 'dashboard' | 'tabela' | 'metas' | 'notificacoes' | 'asaas' | 'bases' | 'relatorios' | 'usuarios' | 'estoque';
+
+// Um item do inventário físico de peças (Controle de Estoque). "Diferença"
+// (qtdFisico - qtdVision) e "valor" da diferença nunca ficam salvos — são
+// sempre calculados na hora, igual todo outro total do sistema.
+export interface EstoqueItem {
+  id: string;
+  codigo: string;
+  descricao: string;
+  marca: string;
+  endereco: string;
+  unidade: string;
+  custo: number;
+  venda: number;
+  status: 'Ativo' | 'Inativo';
+  qtdVision: number;
+  qtdFisico: number;
+}
 
 // Valor especial de filtro de status pra representar "Confirmada + Recebida"
 // juntas — é como o card "Confirmado" do Dashboard soma o valor, então o

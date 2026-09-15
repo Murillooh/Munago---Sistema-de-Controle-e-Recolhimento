@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal, flushSync } from 'react-dom';
-import { ActiveTab, RecolhimentoItem, GoalSettings, AuthUser } from './types';
+import { ActiveTab, RecolhimentoItem, GoalSettings, AuthUser, EstoqueItem } from './types';
 import { INITIAL_RECOLHIMENTOS, INITIAL_GOAL_SETTINGS } from './data/initialData';
 import { Sidebar } from './components/Sidebar';
 import { DashboardView } from './components/DashboardView';
 import { TableManagerView } from './components/TableManagerView';
+import { EstoqueView } from './components/EstoqueView';
 import { MetasView } from './components/MetasView';
 import { NotificationsView } from './components/NotificationsView';
 import { AsaasIntegrationView } from './components/AsaasIntegrationView';
@@ -106,6 +107,7 @@ export default function App() {
     setGoalSettings(loadUserCache('locgrupo_goal_settings', user.id, INITIAL_GOAL_SETTINGS));
     setUnidades(loadUserCache('locgrupo_unidades', user.id, INITIAL_UNIDADES));
     setBaseCategories(loadUserCache('locgrupo_base_categories', user.id, INITIAL_BASE_CATEGORIES));
+    setEstoqueItems(loadUserCache('locgrupo_estoque', user.id, []));
   };
 
   const handleLogout = () => {
@@ -123,6 +125,7 @@ export default function App() {
     setGoalSettings(INITIAL_GOAL_SETTINGS);
     setUnidades(INITIAL_UNIDADES);
     setBaseCategories(INITIAL_BASE_CATEGORIES);
+    setEstoqueItems([]);
   };
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
@@ -245,6 +248,21 @@ export default function App() {
     return INITIAL_GOAL_SETTINGS;
   });
 
+  // Controle de Estoque — mesmo padrão de cache local + sync com servidor
+  // dos recolhimentos, só que sem seed inicial (começa vazio até importar
+  // uma planilha de inventário de verdade).
+  const [estoqueItems, setEstoqueItems] = useState<EstoqueItem[]>(() => {
+    const saved = localStorage.getItem(storageKey('locgrupo_estoque'));
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
   useEffect(() => {
     // Cache local: garante que o sistema funciona normalmente mesmo sem banco
     // configurado, ou se a API estiver fora do ar. Isolado por usuário.
@@ -256,6 +274,11 @@ export default function App() {
     localStorage.setItem(storageKey('locgrupo_goal_settings'), JSON.stringify(goalSettings));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goalSettings, currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem(storageKey('locgrupo_estoque'), JSON.stringify(estoqueItems));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estoqueItems, currentUser]);
 
   // Com DATABASE_URL configurada no servidor, os lançamentos passam a viver no
   // banco. Isso é o que permite o webhook do ASAAS atualizar o status sozinho
@@ -293,6 +316,95 @@ export default function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, sessionToken]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !sessionToken) return;
+    let cancelled = false;
+
+    const loadEstoqueFromServer = async () => {
+      try {
+        const res = await fetch('/api/estoque', { headers: itemsAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled && Array.isArray(data)) setEstoqueItems(data);
+        }
+      } catch {
+        // Banco não configurado ou API indisponível: mantém os dados locais.
+      }
+    };
+
+    loadEstoqueFromServer();
+    const interval = setInterval(loadEstoqueFromServer, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, sessionToken]);
+
+  const handleAddEstoqueItem = (newItem: EstoqueItem) => {
+    setEstoqueItems((prev) => [newItem, ...prev]);
+    fetch('/api/estoque', {
+      method: 'POST',
+      headers: itemsAuthHeaders(),
+      body: JSON.stringify(newItem),
+    }).catch(() => {});
+  };
+
+  const handleUpdateEstoqueItem = (updated: EstoqueItem) => {
+    setEstoqueItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    fetch(`/api/estoque/${updated.id}`, {
+      method: 'PUT',
+      headers: itemsAuthHeaders(),
+      body: JSON.stringify(updated),
+    }).catch(() => {});
+  };
+
+  const handleDeleteEstoqueItem = (id: string) => {
+    askConfirm('Tem certeza que deseja excluir este item de estoque?', () => {
+      const deleted = estoqueItems.find((item) => item.id === id);
+      setEstoqueItems((prev) => prev.filter((item) => item.id !== id));
+      fetch(`/api/estoque/${id}`, { method: 'DELETE', headers: itemsAuthHeaders() }).catch(() => {});
+      if (deleted) showEstoqueUndo([deleted]);
+    });
+  };
+
+  const handleDeleteMultipleEstoque = (ids: string[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    const deleted = estoqueItems.filter((item) => idSet.has(item.id));
+    setEstoqueItems((prev) => prev.filter((item) => !idSet.has(item.id)));
+    fetch('/api/estoque/delete-bulk', {
+      method: 'POST',
+      headers: itemsAuthHeaders(),
+      body: JSON.stringify({ ids }),
+    }).catch(() => {});
+    if (deleted.length > 0) showEstoqueUndo(deleted);
+  };
+
+  const handleImportEstoqueBulk = async (newItems: EstoqueItem[]): Promise<boolean> => {
+    const ids = new Set(newItems.map((i) => i.id));
+    setEstoqueItems((prev) => [...newItems, ...prev]);
+    try {
+      const res = await fetch('/api/estoque/bulk', {
+        method: 'POST',
+        headers: itemsAuthHeaders(),
+        body: JSON.stringify(newItems),
+      });
+      if (!res.ok) throw new Error('Falha ao importar em lote.');
+      const data = await res.json();
+      if (Array.isArray(data.items)) {
+        // Troca os itens otimistas pelos que o servidor confirmou salvos de
+        // verdade — mesmo raciocínio do import de recolhimentos: sem isso,
+        // uma falha silenciosa no meio do lote deixa item "fantasma" na tela
+        // que o polling de 15s depois some sozinho, sem aviso nenhum.
+        setEstoqueItems((prev) => [...data.items, ...prev.filter((i) => !ids.has(i.id))]);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   const handleAddItem = (newItem: RecolhimentoItem) => {
     setItems((prev) => [newItem, ...prev]);
@@ -370,6 +482,31 @@ export default function App() {
       body: JSON.stringify({ ids }),
     }).catch(() => {});
     if (deleted.length > 0) showUndo(deleted);
+  };
+
+  // Mesmo mecanismo de desfazer acima, só que pros itens de Controle de
+  // Estoque — são dois "toasts" independentes porque são dois tipos de
+  // registro diferentes (não faz sentido misturar no mesmo aviso).
+  const [estoqueUndoState, setEstoqueUndoState] = useState<{ items: EstoqueItem[]; timeoutId: ReturnType<typeof setTimeout> } | null>(null);
+
+  const showEstoqueUndo = (deletedItems: EstoqueItem[]) => {
+    setEstoqueUndoState((prev) => {
+      if (prev) clearTimeout(prev.timeoutId);
+      const timeoutId = setTimeout(() => setEstoqueUndoState(null), UNDO_WINDOW_MS);
+      return { items: deletedItems, timeoutId };
+    });
+  };
+
+  const handleUndoDeleteEstoque = () => {
+    setEstoqueUndoState((prev) => {
+      if (!prev) return null;
+      clearTimeout(prev.timeoutId);
+      setEstoqueItems((current) => [...prev.items, ...current]);
+      prev.items.forEach((item) => {
+        fetch('/api/estoque', { method: 'POST', headers: itemsAuthHeaders(), body: JSON.stringify(item) }).catch(() => {});
+      });
+      return null;
+    });
   };
 
   // Espera a confirmação do servidor antes de considerar sucesso — um import
@@ -544,7 +681,7 @@ export default function App() {
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           <GuidedTour runTrigger={runTourTrigger} />
           <BrowserNotifications items={items} sessionToken={sessionToken} />
-          <div className={['dashboard', 'asaas', 'tabela', 'bases', 'metas', 'notificacoes', 'relatorios', 'usuarios'].includes(activeTab) ? 'w-full' : 'max-w-7xl mx-auto'}>
+          <div className={['dashboard', 'asaas', 'tabela', 'bases', 'metas', 'notificacoes', 'relatorios', 'usuarios', 'estoque'].includes(activeTab) ? 'w-full' : 'max-w-7xl mx-auto'}>
             {activeTab === 'dashboard' && (
               <DashboardView
                 items={items}
@@ -605,6 +742,17 @@ export default function App() {
             {activeTab === 'usuarios' && currentUser?.role === 'admin' && (
               <AdminUsersView sessionToken={sessionToken} currentUserId={currentUser.id} />
             )}
+            {activeTab === 'estoque' && (
+              <EstoqueView
+                items={estoqueItems}
+                onAddItem={handleAddEstoqueItem}
+                onUpdateItem={handleUpdateEstoqueItem}
+                onDeleteItem={handleDeleteEstoqueItem}
+                onDeleteMultiple={handleDeleteMultipleEstoque}
+                onImportBulk={handleImportEstoqueBulk}
+                searchTerm={searchTerm}
+              />
+            )}
           </div>
         </main>
       </div>
@@ -618,6 +766,22 @@ export default function App() {
           </span>
           <button
             onClick={handleUndoDelete}
+            className="flex items-center space-x-1.5 bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+            <span>Desfazer</span>
+          </button>
+        </div>
+      )}
+      {estoqueUndoState && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-3 bg-slate-900 dark:bg-slate-800 text-white pl-4 pr-2 py-2 rounded-2xl shadow-2xl border border-white/10">
+          <span className="text-xs font-bold">
+            {estoqueUndoState.items.length > 1
+              ? `${estoqueUndoState.items.length} itens de estoque excluídos.`
+              : 'Item de estoque excluído.'}
+          </span>
+          <button
+            onClick={handleUndoDeleteEstoque}
             className="flex items-center space-x-1.5 bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
           >
             <Undo2 className="w-3.5 h-3.5" />

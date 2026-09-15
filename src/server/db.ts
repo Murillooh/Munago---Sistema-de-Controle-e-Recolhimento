@@ -58,6 +58,37 @@ export function rowToItem(row: RecolhimentoRow) {
   };
 }
 
+export interface EstoqueRow {
+  id: string;
+  codigo: string;
+  descricao: string;
+  marca: string;
+  endereco: string;
+  unidade: string;
+  custo: string; // numeric vem como string do pg
+  venda: string;
+  status: string;
+  qtd_vision: string;
+  qtd_fisico: string;
+  owner_id: string | null;
+}
+
+export function rowToEstoqueItem(row: EstoqueRow) {
+  return {
+    id: row.id,
+    codigo: row.codigo,
+    descricao: row.descricao,
+    marca: row.marca,
+    endereco: row.endereco,
+    unidade: row.unidade,
+    custo: Number(row.custo) || 0,
+    venda: Number(row.venda) || 0,
+    status: row.status,
+    qtdVision: Number(row.qtd_vision) || 0,
+    qtdFisico: Number(row.qtd_fisico) || 0,
+  };
+}
+
 export interface UserRow {
   id: string;
   name: string;
@@ -109,6 +140,24 @@ export function initDb(): Promise<void> {
       ALTER TABLE recolhimentos ADD COLUMN IF NOT EXISTS owner_id TEXT;
       CREATE INDEX IF NOT EXISTS idx_recolhimentos_asaas_id ON recolhimentos(asaas_id);
       CREATE INDEX IF NOT EXISTS idx_recolhimentos_owner_id ON recolhimentos(owner_id);
+
+      -- Controle de Estoque (inventário físico de peças) — mesma estrutura
+      -- de dono por usuário que os recolhimentos.
+      CREATE TABLE IF NOT EXISTS estoque_items (
+        id TEXT PRIMARY KEY,
+        codigo TEXT DEFAULT '',
+        descricao TEXT NOT NULL,
+        marca TEXT DEFAULT '',
+        endereco TEXT DEFAULT '',
+        unidade TEXT DEFAULT 'UN',
+        custo NUMERIC NOT NULL DEFAULT 0,
+        venda NUMERIC NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'Ativo',
+        qtd_vision NUMERIC NOT NULL DEFAULT 0,
+        qtd_fisico NUMERIC NOT NULL DEFAULT 0,
+        owner_id TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_estoque_items_owner_id ON estoque_items(owner_id);
 
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
