@@ -521,8 +521,8 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
       {/* Top Header & Actions - Compact */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div>
-          <h2 className="text-lg font-black text-slate-900 tracking-tight">Gerenciador de Planilha</h2>
-          <p className="text-[10px] text-slate-500 mt-0.5">Gestão diária de recolhimentos e exportação de dados.</p>
+          <h2 className="text-lg font-black text-slate-900 dark:text-slate-100 tracking-tight">Gerenciador de Planilha</h2>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Gestão diária de recolhimentos e exportação de dados.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -555,7 +555,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
           <button
             onClick={handleSyncAsaas}
             disabled={isSyncing}
-            className="flex items-center space-x-1 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold transition-colors border border-indigo-200 uppercase tracking-wider disabled:opacity-50"
+            className="flex items-center space-x-1 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-[10px] font-bold transition-colors border border-indigo-200 dark:border-indigo-800/50 uppercase tracking-wider disabled:opacity-50"
           >
             {isSyncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
             <span>Sincronizar Asaas</span>
@@ -570,7 +570,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
           />
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center space-x-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition-colors border border-slate-300 uppercase tracking-wider"
+            className="flex items-center space-x-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[10px] font-bold transition-colors border border-slate-300 dark:border-slate-700 uppercase tracking-wider"
           >
             <Upload className="w-3 h-3" />
             <span>Importar</span>
@@ -579,9 +579,9 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
           <button
             onClick={handleExportExcel}
             className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border uppercase tracking-wider relative ${
-              selectedIds.size > 0 
-                ? 'bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-500/20' 
-                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+              selectedIds.size > 0
+                ? 'bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-500/20'
+                : 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/50'
             }`}
             title={selectedIds.size > 0 ? `Exportar ${selectedIds.size} itens selecionados` : 'Exportar todos os filtrados'}
           >
@@ -600,7 +600,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
             className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border uppercase tracking-wider relative disabled:opacity-60 ${
               selectedIds.size > 0
                 ? 'bg-rose-600 text-white border-rose-500 shadow-md shadow-rose-500/20'
-                : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                : 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/50'
             }`}
             title={selectedIds.size > 0 ? `Exportar ${selectedIds.size} itens selecionados` : 'Exportar todos os filtrados'}
           >
