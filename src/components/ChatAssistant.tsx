@@ -276,7 +276,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
               height: isMinimized ? '64px' : '500px'
             }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className={`mb-4 w-[350px] sm:w-[400px] rounded-2xl shadow-2xl shadow-black/10 dark:shadow-black/40 flex flex-col overflow-hidden transition-all duration-300 border border-slate-200/60 dark:border-slate-700/40 bg-white/90 dark:bg-slate-900/95 backdrop-blur-xl`}
+            className={`mb-4 w-[350px] sm:w-[400px] rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.4)] flex flex-col overflow-hidden transition-all duration-300 border border-white/60 dark:border-slate-700/60 bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl`}
           >
             {/* Header */}
             <div className="p-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white flex items-center justify-between shadow-lg relative overflow-hidden">
@@ -311,7 +311,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
                 {/* Messages */}
                 <div 
                   ref={scrollRef}
-                  className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50 dark:bg-slate-950/50"
+                  className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/30 dark:bg-slate-950/30"
                 >
                   {messages.length === 0 && (
                     <div className="text-center py-8 space-y-4">
@@ -353,10 +353,10 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
                         </div>
                         <div className={`p-3 rounded-2xl text-[11px] leading-relaxed ${
                           msg.role === 'user' 
-                            ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-tr-none shadow-sm' 
-                            : 'bg-gradient-to-br from-blue-50 to-indigo-50/50 dark:from-blue-900/20 dark:to-indigo-900/10 text-slate-800 dark:text-slate-200 rounded-tl-none border border-blue-100/80 dark:border-blue-900/30 shadow-sm'
+                            ? 'bg-blue-600 text-white rounded-tr-sm shadow-md shadow-blue-600/20' 
+                            : 'bg-white dark:bg-slate-800/90 text-slate-800 dark:text-slate-200 rounded-tl-sm border border-slate-100 dark:border-slate-700 shadow-sm'
                         }`}>
-                          <div className="markdown-body prose prose-slate dark:prose-invert max-w-none prose-xs">
+                          <div className={`markdown-body prose max-w-none prose-xs ${msg.role === 'user' ? 'prose-invert text-white' : 'prose-slate dark:prose-invert'}`}>
                             <ReactMarkdown>
                               {msg.parts[0].text}
                             </ReactMarkdown>
@@ -390,7 +390,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
                 </div>
 
                 {/* Input */}
-                <div className="p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-t border-slate-100/80 dark:border-slate-800/60">
+                <div className="p-4 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md border-t border-white/40 dark:border-slate-800/60">
                   <div className="relative flex items-center">
                     <input
                       type="text"
@@ -398,7 +398,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
                       onChange={(e) => setInput(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && handleSend()}
                       placeholder={isRecording ? 'Ouvindo...' : 'Pergunte qualquer coisa...'}
-                      className={`w-full bg-slate-50/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/40 rounded-xl py-2.5 pl-4 text-[11px] focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400/50 transition-all outline-none text-slate-900 dark:text-white placeholder-slate-400 ${SpeechRecognitionAPI ? 'pr-16' : 'pr-10'}`}
+                      className={`w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full py-3 pl-5 text-[11px] focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all outline-none text-slate-900 dark:text-white placeholder-slate-400 shadow-inner shadow-slate-100 dark:shadow-none ${SpeechRecognitionAPI ? 'pr-16' : 'pr-12'}`}
                     />
                     {SpeechRecognitionAPI && (
                       <button
@@ -416,7 +416,7 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
                     <button
                       onClick={() => handleSend()}
                       disabled={!input.trim() || isLoading}
-                      className="absolute right-2 p-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 transition-all shadow-md shadow-blue-600/20 active:scale-95"
+                      className="absolute right-2 p-2 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-full hover:from-blue-400 hover:to-indigo-500 disabled:opacity-50 transition-all shadow-md active:scale-95 flex items-center justify-center"
                     >
                       <Send className="w-3.5 h-3.5" />
                     </button>
