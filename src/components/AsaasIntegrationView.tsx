@@ -21,6 +21,14 @@ interface AsaasIntegrationViewProps {
 
 const onlyDigits = (v: string) => (v || '').replace(/\D/g, '');
 
+type AsaasBillingType = 'PIX' | 'BOLETO' | 'UNDEFINED';
+const BILLING_TYPE_KEY = 'munago_asaas_billing_type';
+const BILLING_TYPE_OPTIONS: { value: AsaasBillingType; label: string }[] = [
+  { value: 'PIX', label: 'Pix' },
+  { value: 'BOLETO', label: 'Boleto' },
+  { value: 'UNDEFINED', label: 'Pix + Boleto' },
+];
+
 export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ items, unidades, onUpdateItem }) => {
   // Antes travado em sandbox sem nenhuma forma de mudar pela UI — mesmo com
   // uma chave de produção configurada, não tinha como emitir cobrança real.
@@ -31,6 +39,19 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   useEffect(() => {
     localStorage.setItem(ASAAS_MODE_KEY, String(sandbox));
   }, [sandbox]);
+
+  // Antes o servidor gerava sempre PIX, sem opção nenhuma — nunca existia
+  // boleto de verdade mesmo a tela falando "Pix/Boleto". "Pix + Boleto"
+  // (billingType UNDEFINED no ASAAS) deixa o pagador escolher na hora,
+  // por isso é o padrão.
+  const [billingType, setBillingType] = useState<AsaasBillingType>(() => {
+    const saved = localStorage.getItem(BILLING_TYPE_KEY);
+    return saved === 'PIX' || saved === 'BOLETO' || saved === 'UNDEFINED' ? saved : 'UNDEFINED';
+  });
+
+  useEffect(() => {
+    localStorage.setItem(BILLING_TYPE_KEY, billingType);
+  }, [billingType]);
   // Conjunto em vez de um id só — geração em lote dispara várias ao mesmo
   // tempo, cada botão precisa saber só se A SUA cobrança está em andamento.
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
@@ -58,7 +79,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
       const res = await fetch('/api/asaas/create-charge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey, sandbox, chargeData: item }),
+        body: JSON.stringify({ apiKey, sandbox, billingType, chargeData: item }),
       });
       const data = await res.json();
       if (data.success) {
@@ -164,6 +185,22 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
             </span>
             <span className={`text-[9px] font-black uppercase tracking-widest ${!sandbox ? 'text-white' : 'text-white/50'}`}>Produção</span>
           </label>
+
+          <div className="flex items-center gap-1 bg-black/20 p-1 rounded-full">
+            {BILLING_TYPE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setBillingType(opt.value)}
+                title="Tipo de cobrança gerada no ASAAS"
+                className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${
+                  billingType === opt.value ? 'bg-white text-emerald-800' : 'text-white/60 hover:text-white'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

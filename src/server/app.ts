@@ -987,9 +987,22 @@ export async function createApp() {
     }
   });
 
+  const ASAAS_BILLING_TYPES = ['PIX', 'BOLETO', 'UNDEFINED']; // UNDEFINED = deixa o pagador escolher na fatura
+
+  // Extrai uma mensagem de erro legível da resposta de erro padrão do ASAAS
+  // ({ errors: [{ description }] }), sem estourar se o corpo vier vazio/HTML.
+  async function readAsaasError(response: Response, fallback: string): Promise<string> {
+    try {
+      const body = await response.json();
+      return body?.errors?.[0]?.description || fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
   // Create ASAAS Charge (Cobrança) for Recolhimento
   app.post('/api/asaas/create-charge', async (req, res) => {
-    const { apiKey, sandbox, chargeData } = req.body;
+    const { apiKey, sandbox, chargeData, billingType } = req.body;
     if (!apiKey && !process.env.ASAAS_API_KEY) {
       return res.status(400).json({ error: 'Chave API ASAAS obrigatória.' });
     }
@@ -998,12 +1011,17 @@ export async function createApp() {
     const baseUrl = sandbox
       ? 'https://sandbox.asaas.com/v3'
       : 'https://api.asaas.com/v3';
+    // Antes vinha travado em 'PIX' fixo — o sistema nunca gerava boleto de
+    // verdade mesmo a tela dizendo "Pix/Boleto". Agora aceita a escolha do
+    // cliente; entrada inválida cai pro comportamento antigo (PIX).
+    const resolvedBillingType = ASAAS_BILLING_TYPES.includes(billingType) ? billingType : 'PIX';
 
     try {
-      // First, ensure customer exists or create dummy customer in ASAAS
+      // Garante que o cliente exista no ASAAS antes de gerar a cobrança.
+      // cpfCnpj só com dígitos — o ASAAS rejeita com máscara (00.000.000/0000-00).
       const customerPayload = {
         name: chargeData.franquia,
-        cpfCnpj: chargeData.cnpj || '00000000000100',
+        cpfCnpj: (chargeData.cnpj || '').replace(/\D/g, '') || '00000000000100',
         email: 'financeiro@locgrupo.com.br',
       };
 
@@ -1016,16 +1034,21 @@ export async function createApp() {
         body: JSON.stringify(customerPayload),
       });
 
-      let customerId = 'cus_simulated_' + Date.now();
-      if (customerRes.ok) {
-        const custJson = await customerRes.json();
-        customerId = custJson.id;
+      // Antes, uma falha aqui usava um id de cliente FALSO ("cus_simulated_...")
+      // e seguia pro pagamento — que então falhava por cliente inexistente e
+      // caía no fallback simulado, devolvendo "sucesso" pro front sem cobrança
+      // real nenhuma ter sido criada. Agora erro de cliente já para tudo e
+      // devolve o motivo de verdade.
+      if (!customerRes.ok) {
+        const error = await readAsaasError(customerRes, 'Falha ao cadastrar cliente no ASAAS.');
+        return res.status(customerRes.status).json({ success: false, error });
       }
+      const customerId = (await customerRes.json()).id;
 
       // Create Payment (Cobrança)
       const paymentPayload = {
         customer: customerId,
-        billingType: 'PIX', // PIX or BOLETO
+        billingType: resolvedBillingType,
         value: chargeData.valor,
         dueDate: chargeData.vencimento ? chargeData.vencimento.split('/').reverse().join('-') : new Date().toISOString().split('T')[0],
         description: chargeData.descricao || 'Recolhimento de Franquia - LocGrupo',
@@ -1040,33 +1063,24 @@ export async function createApp() {
         body: JSON.stringify(paymentPayload),
       });
 
-      if (paymentRes.ok) {
-        const payJson = await paymentRes.json();
-        return res.json({
-          success: true,
-          chargeId: payJson.id,
-          invoiceUrl: payJson.invoiceUrl || payJson.bankSlipUrl,
-          pixQrCode: payJson.pixTransaction?.qrCode || 'PIX Gerado com Sucesso via ASAAS API',
-          status: 'Gerado no ASAAS',
-        });
-      } else {
-        // Fallback simulation if ASAAS sandbox/production rejects due to test CNPJ
-        return res.json({
-          success: true,
-          simulated: true,
-          chargeId: 'asaas_pay_' + Math.random().toString(36).substring(7),
-          invoiceUrl: 'https://sandbox.asaas.com/i/simulated',
-          pixQrCode: '00020126580014br.gov.bcb.pix...',
-          status: 'Gerado (Simulação ASAAS)',
-        });
+      if (!paymentRes.ok) {
+        const error = await readAsaasError(paymentRes, 'Erro ao gerar cobrança no ASAAS.');
+        return res.status(paymentRes.status).json({ success: false, error });
       }
-    } catch (err: any) {
+
+      const payJson = await paymentRes.json();
       return res.json({
         success: true,
-        simulated: true,
-        chargeId: 'asaas_pay_fallback_' + Date.now(),
-        status: 'Gerado (Modo Offline ASAAS)',
+        chargeId: payJson.id,
+        invoiceUrl: payJson.invoiceUrl || payJson.bankSlipUrl,
+        pixQrCode: payJson.pixTransaction?.qrCode,
+        billingType: resolvedBillingType,
+        status: 'Gerado no ASAAS',
       });
+    } catch (err: any) {
+      // Antes devolvia "sucesso simulado" aqui — uma queda de rede real
+      // virava uma cobrança fake que o usuário achava ter sido emitida.
+      return res.status(502).json({ success: false, error: 'Falha ao comunicar com a API do ASAAS: ' + err.message });
     }
   });
 
@@ -1106,12 +1120,11 @@ export async function createApp() {
       } else {
         return res.status(response.status).json({ error: 'Erro ao buscar status no ASAAS.' });
       }
-    } catch (err) {
-      return res.json({
-        success: true,
-        simulated: true,
-        status: Math.random() > 0.7 ? 'Recebida' : 'Aguardando pagamento'
-      });
+    } catch (err: any) {
+      // Antes sorteava aleatoriamente "Recebida" em 30% das falhas de rede —
+      // uma soneca de rede podia marcar uma cobrança pendente como paga sem
+      // o pagamento ter acontecido de verdade. Agora só reporta a falha.
+      return res.status(502).json({ error: 'Falha ao comunicar com a API do ASAAS: ' + err.message });
     }
   });
 
