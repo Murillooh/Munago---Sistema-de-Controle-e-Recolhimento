@@ -78,6 +78,7 @@ interface TableManagerViewProps {
   onDeleteMultiple: (ids: string[]) => void;
   onImportBulk: (items: RecolhimentoItem[]) => Promise<boolean> | void;
   unidades: Unidade[];
+  onAddUnidade: (unidade: Unidade) => void;
   baseCategories: BaseCategory[];
   onNavigateBases: () => void;
   searchTerm: string;
@@ -96,6 +97,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
     onDeleteMultiple,
     onImportBulk,
     unidades,
+    onAddUnidade,
     baseCategories,
     onNavigateBases,
     searchTerm,
@@ -116,6 +118,12 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
   // Modal State for Add / Edit
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<RecolhimentoItem | null>(null);
+  // "+ Digitar manualmente..." no select de Franquia — antes só gravava a
+  // string literal "custom" no campo e nada mais acontecia (nenhum input
+  // aparecia pra digitar o nome de verdade). Agora mostra um campo de texto
+  // e, ao salvar, cadastra a franquia como Unidade nova automaticamente
+  // (Bases > Unidades), pra já poder configurar CNPJ/chave ASAAS depois.
+  const [manualFranquiaMode, setManualFranquiaMode] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<Partial<RecolhimentoItem>>({
@@ -393,9 +401,10 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
 
   const handleOpenAdd = () => {
     setEditingItem(null);
+    setManualFranquiaMode(false);
     const firstUnit = unidades.length > 0 ? unidades[0] : null;
     const firstCat = baseCategories.length > 0 ? baseCategories[0].nome : '';
-    
+
     setFormData({
       franquia: firstUnit ? firstUnit.nome : '',
       cnpj: firstUnit ? firstUnit.cnpj : '',
@@ -417,6 +426,10 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
   const handleOpenEdit = (item: RecolhimentoItem) => {
     setEditingItem(item);
     setFormData({ ...item });
+    // Se a franquia do item não bate com nenhuma Unidade cadastrada, mantém
+    // o campo de texto livre visível em vez do select (senão o nome sumiria
+    // do formulário, já que não existe opção pra ele no <select>).
+    setManualFranquiaMode(!unidades.some((u) => u.nome === item.franquia));
     setIsModalOpen(true);
   };
 
@@ -425,6 +438,23 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
     if (!formData.franquia || !formData.valor) {
       alert('Por favor, preencha a Franquia e o Valor.');
       return;
+    }
+
+    // Franquia digitada manualmente e ainda sem Unidade correspondente:
+    // cadastra ela sozinha em Bases > Unidades, com o CNPJ/C.Custo já
+    // preenchidos aqui — assim já fica disponível pra selecionar depois e
+    // pra configurar a chave ASAAS, sem precisar duplicar o cadastro lá.
+    if (manualFranquiaMode) {
+      const nomeDigitado = (formData.franquia || '').trim();
+      const jaExiste = unidades.some((u) => u.nome.toLowerCase() === nomeDigitado.toLowerCase());
+      if (nomeDigitado && !jaExiste) {
+        onAddUnidade({
+          id: `u-${Date.now()}`,
+          nome: nomeDigitado,
+          cnpj: formData.cnpj || '',
+          cCustoPadrao: formData.cCusto || '',
+        });
+      }
     }
 
     if (editingItem) {
@@ -1025,10 +1055,17 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Franquia (Unidade) *</label>
                   <select
-                    required
-                    value={formData.franquia || ''}
+                    required={!manualFranquiaMode}
+                    value={manualFranquiaMode ? 'custom' : (formData.franquia || '')}
                     onChange={(e) => {
-                      const selected = unidades.find(u => u.nome === e.target.value);
+                      const value = e.target.value;
+                      if (value === 'custom') {
+                        setManualFranquiaMode(true);
+                        setFormData({ ...formData, franquia: '' });
+                        return;
+                      }
+                      setManualFranquiaMode(false);
+                      const selected = unidades.find(u => u.nome === value);
                       if (selected) {
                         setFormData({
                           ...formData,
@@ -1037,7 +1074,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
                           cCusto: selected.cCustoPadrao || formData.cCusto
                         });
                       } else {
-                        setFormData({ ...formData, franquia: e.target.value });
+                        setFormData({ ...formData, franquia: value });
                       }
                     }}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-blue-500/20"
@@ -1048,6 +1085,22 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
                     ))}
                     <option value="custom">+ Digitar manualmente...</option>
                   </select>
+                  {manualFranquiaMode && (
+                    <div className="mt-2">
+                      <input
+                        type="text"
+                        required
+                        autoFocus
+                        value={formData.franquia || ''}
+                        onChange={(e) => setFormData({ ...formData, franquia: e.target.value })}
+                        placeholder="Nome da nova franquia"
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-blue-500/20"
+                      />
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                        Ao salvar, é cadastrada automaticamente em Bases &gt; Unidades (com o CNPJ e C. Custo preenchidos aqui ao lado).
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div>

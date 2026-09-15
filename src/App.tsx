@@ -748,6 +748,7 @@ export default function App() {
                 onDeleteMultiple={handleDeleteMultiple}
                 onImportBulk={handleImportBulk}
                 unidades={unidades}
+                onAddUnidade={(u) => setUnidades(prev => [...prev, u])}
                 baseCategories={baseCategories}
                 onNavigateBases={() => setActiveTab('bases')}
                 searchTerm={searchTerm}
