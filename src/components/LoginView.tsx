@@ -191,16 +191,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           {mode === 'register' && (
             <div>
               <label className="block text-[10px] font-black tracking-widest text-[#918f9a] mb-2 uppercase">Nome</label>
-              <input required type="text" value={name} onChange={e => setName(e.target.value)} className="w-full h-11 rounded-xl bg-white/5 border border-white/10 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white placeholder-white/30" placeholder="Seu nome" />
+              <input required type="text" value={name} onChange={e => setName(e.target.value)} className="login-input w-full h-11 rounded-xl bg-white/5 border border-white/10 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white placeholder-white/30" placeholder="Seu nome" />
             </div>
           )}
           <div>
             <label className="block text-[10px] font-black tracking-widest text-[#918f9a] mb-2 uppercase">E-mail</label>
-            <input required type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full h-11 rounded-xl bg-white/5 border border-white/10 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white placeholder-white/30" placeholder="seu@email.com" />
+            <input required type="email" value={email} onChange={e => setEmail(e.target.value)} className="login-input w-full h-11 rounded-xl bg-white/5 border border-white/10 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white placeholder-white/30" placeholder="seu@email.com" />
           </div>
           <div>
             <label className="block text-[10px] font-black tracking-widest text-[#918f9a] mb-2 uppercase">Senha</label>
-            <input required minLength={mode === 'register' ? 6 : undefined} type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full h-11 rounded-xl bg-white/5 border border-white/10 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white placeholder-white/30" placeholder="••••••••" />
+            <input required minLength={mode === 'register' ? 6 : undefined} type="password" value={password} onChange={e => setPassword(e.target.value)} className="login-input w-full h-11 rounded-xl bg-white/5 border border-white/10 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white placeholder-white/30" placeholder="••••••••" />
           </div>
           
           <div className="pt-2 space-y-3">

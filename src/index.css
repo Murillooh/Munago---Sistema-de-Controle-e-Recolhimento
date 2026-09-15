@@ -175,3 +175,19 @@ button:focus-visible {
 .markdown-body ul, .markdown-body ol {
   padding-left: 1.25em;
 }
+
+/* ─── Login: autofill do navegador ─── */
+/* Sem isso, o Chrome pinta o campo autopreenchido de branco/azul claro
+   (cor própria dele, não CSS normal — só dá pra sobrescrever via
+   box-shadow inset gigante) e o texto sai ilegível na tela escura de
+   login. Mantém a mesma cor do input normal (fundo escuro, texto branco). */
+.login-input:-webkit-autofill,
+.login-input:-webkit-autofill:hover,
+.login-input:-webkit-autofill:focus,
+.login-input:-webkit-autofill:active {
+  -webkit-text-fill-color: #ffffff;
+  -webkit-box-shadow: 0 0 0px 1000px rgba(255, 255, 255, 0.05) inset;
+  box-shadow: 0 0 0px 1000px rgba(255, 255, 255, 0.05) inset;
+  caret-color: #ffffff;
+  transition: background-color 9999s ease-in-out 0s;
+}
