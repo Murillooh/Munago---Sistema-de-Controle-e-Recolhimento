@@ -25,9 +25,7 @@
  * ---------------------------------------------------------------------------
  */
 
-import { existsSync } from "fs";
-import puppeteer, { Browser } from "puppeteer-core";
-import chromium from "@sparticuz/chromium";
+import { launchBrowser, renderHtmlToPdf } from "./pdfEngine.js";
 
 // ============================================================================
 // Tipos
@@ -625,76 +623,8 @@ th.col-valor { text-align: right; }
 `;
 
 // ============================================================================
-// Lançamento do Chromium: @sparticuz/chromium na Vercel/Lambda (Linux),
-// Chrome/Edge instalado localmente em dev (Windows/Mac/Linux) — o binário
-// do @sparticuz/chromium é Linux-only, não roda fora de serverless.
-// ============================================================================
-
-function findLocalChrome(): string | null {
-  const candidates =
-    process.platform === "win32"
-      ? [
-          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-          "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-          "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-          "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-        ]
-      : process.platform === "darwin"
-      ? [
-          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-          "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-        ]
-      : [
-          "/usr/bin/google-chrome",
-          "/usr/bin/chromium-browser",
-          "/usr/bin/chromium",
-        ];
-  return candidates.find((p) => existsSync(p)) ?? null;
-}
-
-// `mm` no CSS converte pra px numa razão FIXA de 96px/polegada — sempre,
-// não importa o viewport. `.cover` com 297mm x 210mm vira sempre
-// 1122.5 x 793.7 CSS px. O viewport tem que bater EXATAMENTE com isso:
-// se for maior (como os 1754x1240 que tinha aqui antes, escolhidos pra
-// tentar ficar "mais nítido"), o `.cover` — que tem largura própria fixa,
-// não estica pra preencher o body — fica plantado no canto de um viewport
-// maior, sobrando fundo à direita/embaixo exatamente na proporção
-// 1122.5/1754 ≈ 0,64. Isso bateu direto com o Chromium "shell" do
-// @sparticuz/chromium na Vercel; o Chrome completo do dev local mascarava
-// o mesmo descompasso, por isso nunca reproduziu aqui. Nitidez de
-// verdade vem de `deviceScaleFactor` (rasteriza em resolução maior sem
-// mudar o tamanho lógico do layout), não de inflar width/height.
-const PRINT_VIEWPORT = { width: 1123, height: 794, deviceScaleFactor: 2 };
-
-async function launchBrowser(): Promise<Browser> {
-  const isServerless = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
-
-  if (isServerless) {
-    return puppeteer.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath(),
-      defaultViewport: PRINT_VIEWPORT,
-      headless: true,
-    });
-  }
-
-  const localExecutable = process.env.PUPPETEER_EXECUTABLE_PATH || findLocalChrome();
-  if (!localExecutable) {
-    throw new Error(
-      "Chrome/Edge não encontrado nesta máquina. Defina a variável de ambiente " +
-      "PUPPETEER_EXECUTABLE_PATH apontando pro executável instalado."
-    );
-  }
-  return puppeteer.launch({
-    executablePath: localExecutable,
-    headless: true,
-    defaultViewport: PRINT_VIEWPORT,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
-}
-
-// ============================================================================
-// Renderização em PDF (Puppeteer)
+// Renderização em PDF (Puppeteer) — motor real mora em pdfEngine.ts,
+// compartilhado com outros relatórios (ex: estoqueReport.ts).
 // ============================================================================
 
 /**
@@ -721,51 +651,10 @@ export async function generateRecolhimentoReportPdf(
  * custo de abrir/fechar o Chromium a cada requisição).
  */
 export async function generateRecolhimentoReportPdfWithBrowser(
-  browser: Browser,
+  browser: import("puppeteer-core").Browser,
   records: RecolhimentoRecord[],
   opts: BuildReportOptions = {}
 ): Promise<Buffer> {
   const html = buildRecolhimentoReportHtml(records, opts);
-  const page = await browser.newPage();
-  try {
-    // Reforça o viewport aqui também — não depende só do `defaultViewport`
-    // do launch, que algumas combinações de Chromium/puppeteer-core ignoram
-    // silenciosamente pra páginas abertas via `newPage()`.
-    await page.setViewport(PRINT_VIEWPORT);
-    await page.setContent(html, { waitUntil: "load" });
-
-    // Diagnóstico: já tentamos {format:"A4", landscape:true} e depois
-    // preferCSSPageSize, e as duas vezes a página saiu maior que o `.cover`
-    // em produção (Vercel/@sparticuz/chromium), sobrando fundo — sem
-    // reproduzir local. Loga o tamanho real do documento renderizado pra,
-    // se acontecer de novo, dar pra ver nos logs da Vercel o que essa
-    // versão específica do Chromium está calculando, em vez de adivinhar.
-    const measured = await page.evaluate(() => {
-      const rect = document.querySelector(".cover")?.getBoundingClientRect();
-      return {
-        scrollWidth: document.documentElement.scrollWidth,
-        scrollHeight: document.documentElement.scrollHeight,
-        coverRect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null,
-        innerWidth: window.innerWidth,
-        innerHeight: window.innerHeight,
-        devicePixelRatio: window.devicePixelRatio,
-      };
-    });
-    console.log("[recolhimentoReport] documento renderizado:", JSON.stringify(measured));
-
-    // Tamanho explícito em vez de format/landscape (deixa o Puppeteer
-    // calcular em polegadas) ou preferCSSPageSize (lê do `@page` do CSS) —
-    // as duas opções saíram maiores que o pretendido nesse ambiente. Isso
-    // aqui é o jeito mais direto/primitivo da API, sem tabela de conversão
-    // nem parsing de CSS no meio.
-    const pdf = await page.pdf({
-      width: "297mm",
-      height: "210mm",
-      printBackground: true,
-      margin: { top: "0", bottom: "0", left: "0", right: "0" },
-    });
-    return Buffer.from(pdf);
-  } finally {
-    await page.close();
-  }
+  return renderHtmlToPdf(browser, html, "recolhimentoReport");
 }

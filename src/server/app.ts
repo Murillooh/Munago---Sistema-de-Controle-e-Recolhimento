@@ -6,6 +6,7 @@ import { GoogleGenAI } from '@google/genai';
 import { pool, initDb, rowToItem, rowToUser, rowToEstoqueItem } from './db.js';
 import { configureWebPush, getVapidPublicKey, sendPushToUser } from './push.js';
 import { generateRecolhimentoReportPdf, RecolhimentoRecord } from './recolhimentoReport.js';
+import { generateEstoqueReportPdf, EstoqueRecord } from './estoqueReport.js';
 
 // Monta o app Express com todas as rotas de API, sem dar listen — usado tanto
 // pelo servidor local (server.ts, que ainda pluga o Vite/estático por cima)
@@ -632,6 +633,42 @@ export async function createApp() {
       res.send(pdf);
     } catch (err: any) {
       console.error('[reports/pdf] Erro ao gerar PDF:', err);
+      res.status(500).json({ error: 'Erro ao gerar o relatório em PDF.', details: err.message });
+    }
+  });
+
+  app.post('/api/reports/estoque-pdf', requireDb, requireAuth, async (req, res) => {
+    const requestedAt = new Date();
+    try {
+      const items = Array.isArray(req.body?.items) ? req.body.items : [];
+      if (items.length === 0) {
+        return res.status(400).json({ error: 'Nenhum item para gerar o relatório.' });
+      }
+
+      const records: EstoqueRecord[] = items.map((item: any) => ({
+        codigo: item.codigo || '',
+        descricao: item.descricao || '',
+        marca: item.marca || '',
+        endereco: item.endereco || '',
+        unidade: item.unidade || '',
+        custo: Number(item.custo) || 0,
+        venda: Number(item.venda) || 0,
+        status: item.status || 'Ativo',
+        qtdVision: Number(item.qtdVision) || 0,
+        qtdFisico: Number(item.qtdFisico) || 0,
+      }));
+
+      const pdf = await generateEstoqueReportPdf(records, {
+        generatedAt: requestedAt,
+        title: typeof req.body?.title === 'string' ? req.body.title : undefined,
+        lede: typeof req.body?.lede === 'string' ? req.body.lede : undefined,
+      });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="relatorio-estoque.pdf"');
+      res.send(pdf);
+    } catch (err: any) {
+      console.error('[reports/estoque-pdf] Erro ao gerar PDF:', err);
       res.status(500).json({ error: 'Erro ao gerar o relatório em PDF.', details: err.message });
     }
   });

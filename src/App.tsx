@@ -751,12 +751,13 @@ export default function App() {
                 onDeleteMultiple={handleDeleteMultipleEstoque}
                 onImportBulk={handleImportEstoqueBulk}
                 searchTerm={searchTerm}
+                sessionToken={sessionToken}
               />
             )}
           </div>
         </main>
       </div>
-      <ChatAssistant items={items} goalSettings={goalSettings} sessionToken={sessionToken} />
+      <ChatAssistant items={items} estoqueItems={estoqueItems} goalSettings={goalSettings} sessionToken={sessionToken} />
       {undoState && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-3 bg-slate-900 dark:bg-slate-800 text-white pl-4 pr-2 py-2 rounded-2xl shadow-2xl border border-white/10">
           <span className="text-xs font-bold">

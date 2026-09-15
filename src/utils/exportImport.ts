@@ -267,6 +267,54 @@ export function exportEstoqueToExcel(data: EstoqueItem[], filename = 'controle_e
   XLSX.writeFile(workbook, filename);
 }
 
+// Mesmo padrão de exportToPDF: gera no servidor (Puppeteer, ver
+// src/server/estoqueReport.ts) e devolve o PDF pronto.
+export async function exportEstoqueToPDF(
+  data: EstoqueItem[],
+  filename = 'relatorio_estoque.pdf',
+  options?: { returnBlob?: boolean },
+  sessionToken?: string | null
+): Promise<Blob | void> {
+  if (data.length === 0) {
+    const msg = 'Nenhum item para gerar o relatório.';
+    if (options?.returnBlob) throw new Error(msg);
+    alert(msg);
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/reports/estoque-pdf', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+      },
+      body: JSON.stringify({ items: data }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.error || `Servidor retornou ${res.status} ao gerar o PDF.`);
+    }
+
+    const blob = await res.blob();
+    if (options?.returnBlob) return blob;
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Error generating estoque PDF:', error);
+    if (options?.returnBlob) throw error;
+    alert('Erro ao gerar o PDF. Verifique sua conexão e tente novamente.');
+  }
+}
+
 // Mesma lógica de detecção de cabeçalho/aba do parseExcelFile, adaptada
 // pra planilha de inventário (ex: "Inventário Santa Cruz"). A aba usada é
 // sempre a mais completa (a "Detalhado"/geral) — "Sobras" e "Faltas" nessas

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { EstoqueItem } from '../types';
-import { exportEstoqueToExcel, parseEstoqueExcelFile } from '../utils/exportImport';
+import { exportEstoqueToExcel, exportEstoqueToPDF, parseEstoqueExcelFile } from '../utils/exportImport';
 import {
   Search,
   Upload,
@@ -18,6 +18,7 @@ import {
   TrendingDown,
   AlertTriangle,
   Boxes,
+  FileText,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -30,6 +31,7 @@ interface EstoqueViewProps {
   onDeleteMultiple: (ids: string[]) => void;
   onImportBulk: (items: EstoqueItem[]) => Promise<boolean> | void;
   searchTerm: string;
+  sessionToken: string | null;
 }
 
 type DiffFilter = 'todos' | 'sobras' | 'faltas' | 'divergentes';
@@ -57,6 +59,7 @@ export const EstoqueView: React.FC<EstoqueViewProps> = ({
   onDeleteMultiple,
   onImportBulk,
   searchTerm,
+  sessionToken,
 }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'todos' | 'Ativo' | 'Inativo'>('todos');
@@ -220,6 +223,18 @@ export const EstoqueView: React.FC<EstoqueViewProps> = ({
     exportEstoqueToExcel(toExport);
   };
 
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  const handleExportPDF = async () => {
+    const toExport = selectedIds.size > 0 ? items.filter((i) => selectedIds.has(i.id)) : filteredItems;
+    setIsExportingPdf(true);
+    try {
+      await exportEstoqueToPDF(toExport, 'relatorio_estoque.pdf', undefined, sessionToken);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   const confirmBulkDeleteAction = () => {
     onDeleteMultiple(Array.from(selectedIds));
     setSelectedIds(new Set());
@@ -304,6 +319,20 @@ export const EstoqueView: React.FC<EstoqueViewProps> = ({
           >
             <Download className="w-3 h-3" />
             <span>Excel</span>
+          </button>
+
+          <button
+            onClick={handleExportPDF}
+            disabled={isExportingPdf}
+            className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border uppercase tracking-wider relative disabled:opacity-60 ${
+              selectedIds.size > 0
+                ? 'bg-rose-600 text-white border-rose-500 shadow-md shadow-rose-500/20'
+                : 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/50'
+            }`}
+            title={selectedIds.size > 0 ? `Exportar ${selectedIds.size} itens selecionados` : 'Exportar todos os filtrados'}
+          >
+            {isExportingPdf ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
+            <span>{isExportingPdf ? 'Gerando...' : 'PDF'}</span>
           </button>
 
           {selectedIds.size > 0 && (

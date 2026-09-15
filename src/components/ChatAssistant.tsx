@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, X, Send, Bot, User, Sparkles, Minimize2, Maximize2, Download, Mic, MicOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
-import { RecolhimentoItem, GoalSettings } from '../types';
-import { exportToPDF } from '../utils/exportImport';
+import { RecolhimentoItem, EstoqueItem, GoalSettings } from '../types';
+import { exportToPDF, exportEstoqueToPDF } from '../utils/exportImport';
 
 interface Message {
   role: 'user' | 'model';
@@ -16,6 +16,7 @@ interface Message {
 
 interface ChatAssistantProps {
   items: RecolhimentoItem[];
+  estoqueItems: EstoqueItem[];
   goalSettings: GoalSettings;
   sessionToken: string | null;
 }
@@ -78,6 +79,33 @@ function wantsPdf(text: string): boolean {
   return /\bpdf\b/.test(t) || (ACTION_WORDS.test(t) && REPORT_WORDS.test(t));
 }
 
+// Pedido de PDF de estoque não passa pelo /api/chat/pdf-intent — esse
+// endpoint só sabe interpretar o schema de Recolhimento. Aqui basta um
+// gatilho de palavra-chave pra saber QUAL base usar, e um filtro simples
+// (sobra/falta/divergência) sobre a diferença Vision x Físico.
+const ESTOQUE_WORDS = /\b(estoque|invent[aá]rio|pe[çc]as?)\b/;
+
+function wantsEstoque(text: string): boolean {
+  return ESTOQUE_WORDS.test(text.toLowerCase());
+}
+
+type EstoqueFilter = 'todos' | 'sobras' | 'faltas' | 'divergentes';
+
+function detectEstoqueFilter(text: string): EstoqueFilter {
+  const t = text.toLowerCase();
+  if (/\bsobr/.test(t)) return 'sobras';
+  if (/\bfalt/.test(t)) return 'faltas';
+  if (/diverg/.test(t)) return 'divergentes';
+  return 'todos';
+}
+
+const ESTOQUE_FILTER_LABELS: Record<EstoqueFilter, string> = {
+  todos: 'todos os itens',
+  sobras: 'sobras',
+  faltas: 'faltas',
+  divergentes: 'divergências',
+};
+
 interface PdfIntent {
   status: RecolhimentoItem['status'] | null;
   limit: number | null;
@@ -101,9 +129,10 @@ const SUGGESTIONS: string[] = [
   'Gerar PDF dos recebidos',
   'PDF dos 10 maiores aguardando pagamento',
   'Gerar PDF dos confirmados',
+  'PDF das divergências de estoque',
 ];
 
-export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSettings, sessionToken }) => {
+export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, estoqueItems, goalSettings, sessionToken }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [input, setInput] = useState('');
@@ -174,6 +203,43 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, goalSetting
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+
+    if (wantsPdf(prompt) && wantsEstoque(prompt)) {
+      try {
+        const filterKind = detectEstoqueFilter(prompt);
+        const diff = (i: EstoqueItem) => i.qtdFisico - i.qtdVision;
+        let filtered = estoqueItems;
+        if (filterKind === 'sobras') filtered = estoqueItems.filter((i) => diff(i) > 0);
+        else if (filterKind === 'faltas') filtered = estoqueItems.filter((i) => diff(i) < 0);
+        else if (filterKind === 'divergentes') filtered = estoqueItems.filter((i) => diff(i) !== 0);
+
+        const label = ESTOQUE_FILTER_LABELS[filterKind];
+
+        if (filtered.length === 0) {
+          setMessages(prev => [...prev, {
+            role: 'model',
+            parts: [{ text: `Não achei nenhum item de estoque (${label}) pra colocar no PDF.` }],
+          }]);
+        } else {
+          const filename = `relatorio_estoque_${filterKind}.pdf`;
+          const blob = await exportEstoqueToPDF(filtered, filename, { returnBlob: true }, sessionToken) as Blob;
+          const url = URL.createObjectURL(blob);
+          objectUrlsRef.current.push(url);
+          const valor = filtered.reduce((s, i) => s + i.custo * i.qtdFisico, 0);
+          setMessages(prev => [...prev, {
+            role: 'model',
+            parts: [{ text: `Prontinho! Gerei o PDF de estoque (${label}) — **${filtered.length} item${filtered.length > 1 ? 's' : ''}**, R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.` }],
+            attachment: { url, filename, label: `Baixar PDF (${label})` },
+          }]);
+        }
+      } catch (err) {
+        console.error('Estoque PDF generation error:', err);
+        setMessages(prev => [...prev, { role: 'model', parts: [{ text: 'Deu ruim gerando o PDF de estoque. Tenta de novo?' }] }]);
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
 
     if (wantsPdf(prompt)) {
       try {
