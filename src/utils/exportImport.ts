@@ -93,9 +93,9 @@ export async function exportToPDF(
     doc.setTextColor(71, 85, 105); // slate-600
     doc.text('Relatório de Controle de Recolhimento', textX, 23);
 
-    // Date & Total metadata on the right
+    // Date & Total metadata on the right — preto em vez de cinza claro, melhora a leitura.
     doc.setFontSize(9);
-    doc.setTextColor(100, 100, 100);
+    doc.setTextColor(0, 0, 0);
     doc.text(`Gerado em: ${new Date().toLocaleDateString()} | Total de Registros: ${data.length}`, 283, 17, { align: 'right' });
 
     // Subtle dividing line
@@ -150,6 +150,18 @@ export async function exportToPDF(
       alternateRowStyles: { fillColor: [248, 250, 252] },
       margin: { left: 14, right: 14 },
     });
+
+    // Rodapé com o nome da marca em toda página — fecha o relatório com
+    // identidade visual, em vez de terminar na última linha da tabela.
+    const pageCount = doc.getNumberOfPages();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text('Munago', 14, pageHeight - 8);
+    }
 
     if (options?.returnBlob) {
       return doc.output('blob');
