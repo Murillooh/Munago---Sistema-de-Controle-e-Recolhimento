@@ -643,6 +643,15 @@ function findLocalChrome(): string | null {
   return candidates.find((p) => existsSync(p)) ?? null;
 }
 
+// Sem isso, o viewport padrão do puppeteer-core é 800x600px — bem menor que
+// os 297mm (~1123px a 96dpi) da página em paisagem. Com o Chromium "shell"
+// do @sparticuz/chromium (usado na Vercel), isso fez o layout calcular a
+// largura de grid/flex com base nesse viewport pequeno, deixando a página
+// impressa com a capa encolhida num canto e o resto em branco — o Chrome
+// completo (usado no dev local) não tinha esse problema, então só apareceu
+// em produção. Um viewport maior que o conteúdo remove essa ambiguidade.
+const PRINT_VIEWPORT = { width: 1754, height: 1240 };
+
 async function launchBrowser(): Promise<Browser> {
   const isServerless = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
 
@@ -650,6 +659,7 @@ async function launchBrowser(): Promise<Browser> {
     return puppeteer.launch({
       args: chromium.args,
       executablePath: await chromium.executablePath(),
+      defaultViewport: PRINT_VIEWPORT,
       headless: true,
     });
   }
@@ -664,6 +674,7 @@ async function launchBrowser(): Promise<Browser> {
   return puppeteer.launch({
     executablePath: localExecutable,
     headless: true,
+    defaultViewport: PRINT_VIEWPORT,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 }
@@ -703,6 +714,10 @@ export async function generateRecolhimentoReportPdfWithBrowser(
   const html = buildRecolhimentoReportHtml(records, opts);
   const page = await browser.newPage();
   try {
+    // Reforça o viewport aqui também — não depende só do `defaultViewport`
+    // do launch, que algumas combinações de Chromium/puppeteer-core ignoram
+    // silenciosamente pra páginas abertas via `newPage()`.
+    await page.setViewport(PRINT_VIEWPORT);
     await page.setContent(html, { waitUntil: "load" });
     const pdf = await page.pdf({
       format: "A4",
