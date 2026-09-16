@@ -3,10 +3,23 @@ import { Pool } from 'pg';
 // Postgres genérico: mesma connection string serve pra Supabase, AWS RDS, Cloud SQL etc.
 // Sem DATABASE_URL configurada, `pool` fica null e o servidor cai de volta pro
 // comportamento atual (localStorage no navegador) sem quebrar nada.
+// Serverless (Vercel): cada invocação pode cair numa instância Lambda nova,
+// cada uma com o SEU PRÓPRIO Pool — sem limite aqui, o padrão da lib `pg` é
+// até 10 conexões por instância. Sob rajada (polling automático do ASAAS a
+// cada 90s em cada aba aberta, cron, uso normal) a soma de várias instâncias
+// simultâneas estourou o limite do RDS ("too many clients already",
+// "remaining connection slots are reserved..."), derrubando createApp()
+// inteiro (initDb falha) — e com isso TODA rota da API de uma vez, não só a
+// que mexia no banco. `max` baixo por instância + idle/connect timeout
+// curtos é o ajuste padrão pra Postgres tradicional atrás de função
+// serverless sem um pooler (RDS Proxy/PgBouncer) na frente.
 export const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: process.env.DATABASE_SSL === 'false' ? undefined : { rejectUnauthorized: false },
+      max: 3,
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 8000,
     })
   : null;
 

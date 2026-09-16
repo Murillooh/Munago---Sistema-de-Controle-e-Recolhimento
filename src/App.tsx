@@ -503,6 +503,16 @@ export default function App() {
       const unidadesComChave = unidades.filter((u: any) => u.asaasApiKey);
       if (unidadesComChave.length === 0) return;
 
+      // Acumula tudo e manda num POST em lote só no final, em vez de um
+      // fetch individual (handleAddItem) por cobrança nova — um backlog
+      // grande pra importar de uma vez (primeira vez rodando, ou muita
+      // cobrança lançada direto no ASAAS) virava uma rajada de dezenas de
+      // requisições simultâneas, cada uma abrindo sua própria conexão de
+      // banco; foi isso que já estourou o limite de conexões do RDS e
+      // derrubou a API inteira uma vez ("too many clients already").
+      const newItems: RecolhimentoItem[] = [];
+      const existingAsaasIds = new Set(itemsRef.current.filter((i) => i.asaasId).map((i) => i.asaasId));
+
       for (const unidade of unidadesComChave) {
         if (cancelled) return;
         try {
@@ -515,9 +525,8 @@ export default function App() {
           const data = await res.json();
           const payments = Array.isArray(data.payments) ? data.payments : [];
 
-          const existingAsaasIds = new Set(itemsRef.current.filter((i) => i.asaasId).map((i) => i.asaasId));
           for (const p of payments) {
-            if (cancelled || existingAsaasIds.has(p.id)) continue;
+            if (existingAsaasIds.has(p.id)) continue;
 
             const [y, m, d] = String(p.dueDate || '').split('-');
             const vencimento = d && m && y ? `${d}/${m}/${y}` : '';
@@ -526,7 +535,7 @@ export default function App() {
               ? `${MONTHS_PT_ASAAS[dueDate.getMonth()]}/${String(dueDate.getFullYear()).slice(-2)}`
               : '';
 
-            const newItem: RecolhimentoItem = {
+            newItems.push({
               id: `asaas-${p.id}`,
               franquia: unidade.nome,
               cnpj: unidade.cnpj || '',
@@ -543,13 +552,16 @@ export default function App() {
               asaasId: p.id,
               asaasInvoiceUrl: p.invoiceUrl || undefined,
               asaasImportedAt: new Date().toISOString(),
-            };
-            handleAddItem(newItem);
+            });
             existingAsaasIds.add(p.id);
           }
         } catch {
           // Chave com problema momentâneo ou API fora do ar — tenta de novo no próximo ciclo.
         }
+      }
+
+      if (!cancelled && newItems.length > 0) {
+        await handleImportBulk(newItems);
       }
     };
 
@@ -652,7 +664,7 @@ export default function App() {
   // (rede caiu, conexão do banco caiu), o polling de 15s reflete o banco de
   // verdade por cima e os itens "somem sozinhos" pouco depois, sem aviso
   // nenhum. Devolve true/false pra quem chamou poder avisar o usuário.
-  const handleImportBulk = async (newItems: RecolhimentoItem[]): Promise<boolean> => {
+  const handleImportBulk = async (newItems: RecolhimentoItem[]): Promise<{ ok: true } | { ok: false; error: string }> => {
     const ids = new Set(newItems.map((i) => i.id));
     setItems((prev) => [...newItems, ...prev]);
     try {
@@ -663,15 +675,19 @@ export default function App() {
       });
       // 503 = banco não configurado ainda: modo local de sempre, não é falha
       // de verdade — os itens ficam só no navegador, sem rollback.
-      if (res.status === 503) return true;
+      if (res.status === 503) return { ok: true };
       if (!res.ok) {
         setItems((prev) => prev.filter((item) => !ids.has(item.id)));
-        return false;
+        // O motivo real do servidor (ex: erro de conexão com o banco, linha
+        // com dado que a coluna recusa) ia pro limbo antes — só um "tente de
+        // novo" genérico que não ajuda a saber o que corrigir na planilha.
+        const data = await res.json().catch(() => ({}) as any);
+        return { ok: false, error: data.error || data.details || `Servidor recusou o import (HTTP ${res.status}).` };
       }
-      return true;
-    } catch {
+      return { ok: true };
+    } catch (err: any) {
       setItems((prev) => prev.filter((item) => !ids.has(item.id)));
-      return false;
+      return { ok: false, error: err?.message || 'Falha de conexão com o servidor.' };
     }
   };
 

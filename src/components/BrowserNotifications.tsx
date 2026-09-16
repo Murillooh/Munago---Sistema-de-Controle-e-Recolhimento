@@ -40,7 +40,11 @@ export const BrowserNotifications: React.FC<BrowserNotificationsProps> = ({ item
     const result: EnsurePushSubscriptionResult = await ensurePushSubscription(sessionToken);
     if (result.ok === false) {
       console.error('[push] Falha ao inscrever:', result.reason, result.details);
-      setFailReason(FAIL_REASON_LABEL[result.reason] || `Falha desconhecida (${result.reason}).`);
+      // O motivo real (result.details, a mensagem da exceção do navegador)
+      // vai direto na tela — "veja o console" não ajuda em quem tá sem
+      // DevTools aberto ou no celular, onde não dá pra abrir de jeito nenhum.
+      const base = FAIL_REASON_LABEL[result.reason] || `Falha desconhecida (${result.reason}).`;
+      setFailReason(result.details ? `${base} (${result.details})` : base);
       return false;
     }
 

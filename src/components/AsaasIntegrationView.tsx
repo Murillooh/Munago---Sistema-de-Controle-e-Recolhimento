@@ -24,6 +24,7 @@ import {
   XCircle,
   Folder,
   FolderOpen,
+  Eye,
 } from 'lucide-react';
 import { findUnidadeForItem, ASAAS_AUTO_IMPORT_INTERVAL_MS } from '../utils/unidades';
 
@@ -158,6 +159,45 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   // Resolve a unidade (e sua chave de API) que corresponde a um lançamento —
   // por CNPJ, com fallback por nome da unidade x C. Custo (ver utils/unidades.ts).
   const findUnidade = (item: RecolhimentoItem) => findUnidadeForItem(unidades, item);
+
+  // Ver o boleto sem sair do Munago — abre um preview embutido (iframe) em
+  // vez de só linkar pro ASAAS numa aba nova. bankSlipUrl é o PDF do boleto
+  // em si; invoiceUrl (página de fatura do ASAAS) entra só como fallback
+  // quando não tem PDF (cobrança Pix pura, por exemplo).
+  const [boletoViewer, setBoletoViewer] = useState<
+    { title: string; loading: boolean; url?: string; fallbackUrl?: string; error?: string } | null
+  >(null);
+
+  const openBoletoViewer = async (item: RecolhimentoItem) => {
+    const unidade = findUnidade(item);
+    const apiKey = unidade?.asaasApiKey;
+    const fallback = item.asaasInvoiceUrl;
+    if (!apiKey || !item.asaasId) {
+      if (fallback) window.open(fallback, '_blank', 'noreferrer');
+      return;
+    }
+    setBoletoViewer({ title: item.franquia, loading: true, fallbackUrl: fallback });
+    try {
+      const res = await fetch('/api/asaas/get-payment-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey, sandbox, paymentId: item.asaasId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBoletoViewer({ title: item.franquia, loading: false, error: data.error || 'Falha ao buscar o boleto no ASAAS.', fallbackUrl: fallback });
+        return;
+      }
+      setBoletoViewer({
+        title: item.franquia,
+        loading: false,
+        url: data.bankSlipUrl || data.invoiceUrl || fallback,
+        fallbackUrl: data.invoiceUrl || fallback,
+      });
+    } catch {
+      setBoletoViewer({ title: item.franquia, loading: false, error: 'Falha ao comunicar com a API do ASAAS.', fallbackUrl: fallback });
+    }
+  };
 
   // Devolve o motivo de erro em vez de já mostrar alert() — a geração em
   // lote precisa acumular os erros de vários itens numa mensagem só, não
@@ -710,17 +750,27 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                         <QrCode className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                         <div>
                           <p className="font-bold">Cobrança Gerada no ASAAS (ID: {generated?.chargeId || item.asaasId}) • Aguardando confirmação de pagamento</p>
-                          {invoiceUrl && (
-                            <a
-                              href={invoiceUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-blue-600 dark:text-blue-400 hover:underline flex items-center space-x-1 mt-0.5"
+                          <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => openBoletoViewer(item)}
+                              className="text-emerald-700 dark:text-emerald-300 hover:underline flex items-center space-x-1 font-bold"
                             >
-                              <span>Abrir Link da Fatura Pix/Boleto</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
+                              <Eye className="w-3 h-3" />
+                              <span>Ver Boleto</span>
+                            </button>
+                            {invoiceUrl && (
+                              <a
+                                href={invoiceUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-blue-600 dark:text-blue-400 hover:underline flex items-center space-x-1"
+                              >
+                                <span>Abrir Link da Fatura Pix/Boleto</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1203,6 +1253,63 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
               </>
             )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {boletoViewer && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl h-[85vh] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50 shrink-0">
+              <div className="min-w-0">
+                <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight truncate">Boleto — {boletoViewer.title}</h3>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">Direto do ASAAS, sem sair do Munago.</p>
+              </div>
+              <button onClick={() => setBoletoViewer(null)} className="text-slate-400 hover:text-slate-600 transition-colors shrink-0 p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 min-h-0 bg-slate-100 dark:bg-slate-950 relative">
+              {boletoViewer.loading ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-400 dark:text-slate-500">
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                  <span className="text-xs font-semibold">Buscando o boleto no ASAAS...</span>
+                </div>
+              ) : boletoViewer.error ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6">
+                  <ShieldAlert className="w-6 h-6 text-rose-500" />
+                  <p className="text-xs font-bold text-rose-600 dark:text-rose-400">{boletoViewer.error}</p>
+                  {boletoViewer.fallbackUrl && (
+                    <a href={boletoViewer.fallbackUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 mt-1">
+                      <span>Abrir no ASAAS mesmo assim</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+              ) : boletoViewer.url ? (
+                <iframe src={boletoViewer.url} title={`Boleto — ${boletoViewer.title}`} className="w-full h-full border-0" />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500">
+                  Boleto ainda não disponível pra essa cobrança.
+                </div>
+              )}
+            </div>
+
+            {!boletoViewer.loading && boletoViewer.fallbackUrl && (
+              <div className="p-3 border-t border-slate-100 dark:border-slate-800 shrink-0 flex items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-800/50">
+                <p className="text-[10px] text-slate-400 dark:text-slate-500">Não carregou? O ASAAS pode bloquear a exibição embutida.</p>
+                <a
+                  href={boletoViewer.fallbackUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-lg text-[11px] font-bold hover:opacity-90 transition-opacity"
+                >
+                  <span>Abrir em nova aba</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            )}
           </div>
         </div>
       )}

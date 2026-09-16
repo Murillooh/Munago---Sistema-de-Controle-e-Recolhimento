@@ -1214,6 +1214,10 @@ export async function createApp() {
           paymentDate: data.paymentDate,
           asaasStatus: data.status,
           invoiceUrl: data.invoiceUrl || data.bankSlipUrl,
+          // Separado do invoiceUrl (página de fatura do ASAAS, não embedável) —
+          // bankSlipUrl aponta pro PDF do boleto em si, que dá pra mostrar
+          // dentro de um iframe no Munago sem sair pro ASAAS.
+          bankSlipUrl: data.bankSlipUrl || undefined,
         });
       } else {
         return res.status(response.status).json({ error: 'Erro ao buscar status no ASAAS.' });

@@ -98,9 +98,13 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ items, goa
           'no-token': 'Sessão expirada — faça login de novo pra testar o push.',
           'no-vapid': 'Servidor sem chave VAPID configurada — o push real está desligado neste ambiente.',
           'server-rejected': 'O servidor recusou a inscrição de push.',
-          'subscribe-failed': 'Falha ao inscrever este navegador pro push. Veja o console para detalhes.',
+          'subscribe-failed': 'Falha ao inscrever este navegador pro push.',
         };
-        setPushStatus({ type: 'error', message: reasonMessage[subscribed.reason] });
+        const base = reasonMessage[subscribed.reason] || `Falha desconhecida (${subscribed.reason}).`;
+        // Mostra o motivo real (mensagem da exceção do navegador) na tela em
+        // vez de mandar abrir o console — "veja o console" não ajuda quando
+        // não tem DevTools aberto, ou no celular, onde não dá pra abrir.
+        setPushStatus({ type: 'error', message: subscribed.details ? `${base} (${subscribed.details})` : base });
         return;
       }
 
