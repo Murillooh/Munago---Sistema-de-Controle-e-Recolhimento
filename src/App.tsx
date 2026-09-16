@@ -71,9 +71,28 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_UNIDADES;
   });
 
+  // Se o que tá salvo é exatamente o conjunto antigo de categorias-padrão
+  // (Taxa/Royalties/Fundo de Propaganda/Outros), troca sozinho pelo novo
+  // padrão — sem isso, cada conta já usada teria que editar isso na mão em
+  // Bases > Categorias, já que essa lista vive no localStorage, não no banco.
+  // Quem já personalizou (conjunto diferente) não é mexido.
+  const LEGACY_DEFAULT_CATEGORY_NAMES = ['Fundo de Propaganda', 'Outros', 'Royalties', 'Taxa'].sort();
+  const migrateLegacyCategories = (parsed: any[]): any[] => {
+    const names = (parsed || []).map((c: any) => c?.nome).sort();
+    const isLegacyDefault =
+      names.length === LEGACY_DEFAULT_CATEGORY_NAMES.length &&
+      names.every((n: string, i: number) => n === LEGACY_DEFAULT_CATEGORY_NAMES[i]);
+    return isLegacyDefault ? INITIAL_BASE_CATEGORIES : parsed;
+  };
+
   const [baseCategories, setBaseCategories] = useState<any[]>(() => {
     const saved = localStorage.getItem(storageKey('locgrupo_base_categories'));
-    return saved ? JSON.parse(saved) : INITIAL_BASE_CATEGORIES;
+    if (!saved) return INITIAL_BASE_CATEGORIES;
+    try {
+      return migrateLegacyCategories(JSON.parse(saved));
+    } catch {
+      return INITIAL_BASE_CATEGORIES;
+    }
   });
 
   useEffect(() => {
@@ -108,7 +127,7 @@ export default function App() {
     setItems(loadUserCache('locgrupo_recolhimentos', user.id, INITIAL_RECOLHIMENTOS));
     setGoalSettings(loadUserCache('locgrupo_goal_settings', user.id, INITIAL_GOAL_SETTINGS));
     setUnidades(loadUserCache('locgrupo_unidades', user.id, INITIAL_UNIDADES));
-    setBaseCategories(loadUserCache('locgrupo_base_categories', user.id, INITIAL_BASE_CATEGORIES));
+    setBaseCategories(migrateLegacyCategories(loadUserCache('locgrupo_base_categories', user.id, INITIAL_BASE_CATEGORIES)));
     setEstoqueItems(loadUserCache('locgrupo_estoque', user.id, []));
   };
 
