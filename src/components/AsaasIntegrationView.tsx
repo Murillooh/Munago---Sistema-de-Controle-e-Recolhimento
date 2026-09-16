@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { RecolhimentoItem, Unidade } from '../types';
 import {
-  CreditCard,
   ExternalLink,
   Send,
   Loader2,
@@ -528,35 +527,35 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
         </div>
       )}
 
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <div className="inline-flex items-center space-x-2 bg-emerald-500/20 text-emerald-200 px-3 py-1 rounded-full text-xs font-semibold mb-2 backdrop-blur-md">
-            <Building2 className="w-3.5 h-3.5" />
-            <span>Integração Bancária Oficial • ASAAS API</span>
+      {/* Header Banner — compacto: tudo numa linha só, sem o card de aviso
+          repetido embaixo (o selo "Produção (real)" já avisa isso sempre,
+          já que não existe mais alternância de ambiente). */}
+      <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 rounded-2xl px-5 py-3.5 text-white shadow-xl flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-200 border border-emerald-400/30 shrink-0">
+            <Building2 className="w-4 h-4" />
           </div>
-          <h2 className="text-2xl font-bold">Cobranças e Pagamentos via ASAAS</h2>
-          <p className="text-emerald-100 text-sm mt-1 max-w-2xl">
-            Cada unidade usa sua própria chave de API ASAAS, configurada em Bases &gt; Unidades. A cobrança é gerada com a chave da unidade correspondente à franquia.
-          </p>
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold leading-tight truncate">Cobranças e Pagamentos via ASAAS</h2>
+            <p className="text-emerald-200/80 text-[10px] truncate">Chave por unidade (Bases &gt; Unidades) • Integração Bancária Oficial</p>
+          </div>
         </div>
-        <div className="flex flex-col items-end gap-2 shrink-0">
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-200 border border-emerald-400/30">
-            <CreditCard className="w-6 h-6" />
-          </div>
-          <span className="flex items-center gap-1.5 bg-rose-500/90 px-3 py-1.5 rounded-full">
+
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <span
+            title="Toda cobrança gerada aqui é real, com dinheiro de verdade envolvido"
+            className="flex items-center gap-1.5 bg-rose-500/90 px-2.5 py-1 rounded-full"
+          >
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
             <span className="text-[9px] font-black uppercase tracking-widest text-white">Produção (real)</span>
           </span>
 
           <span
-            className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-full"
+            className="flex items-center gap-1.5 bg-black/20 px-2.5 py-1 rounded-full"
             title="Verificação automática de cobranças novas lançadas direto no ASAAS"
           >
             <Clock className="w-3 h-3 text-white/70" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-white/90">
-              Próxima verificação em {importCountdownLabel}
-            </span>
+            <span className="text-[9px] font-black uppercase tracking-widest text-white/90">{importCountdownLabel}</span>
           </span>
 
           <div className="flex items-center gap-1 bg-black/20 p-1 rounded-full">
@@ -575,11 +574,6 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
             ))}
           </div>
         </div>
-      </div>
-
-      <div className="p-4 rounded-xl border border-rose-300 dark:border-rose-800/50 bg-rose-50 dark:bg-rose-900/20 text-rose-800 dark:text-rose-300 text-xs font-bold flex items-center space-x-2.5">
-        <ShieldAlert className="w-4 h-4 shrink-0" />
-        <span>Modo PRODUÇÃO — toda cobrança gerada aqui é real, com dinheiro de verdade envolvido.</span>
       </div>
 
       {/* Pastas por unidade — clica pra ver só os boletos daquela franquia/região */}
