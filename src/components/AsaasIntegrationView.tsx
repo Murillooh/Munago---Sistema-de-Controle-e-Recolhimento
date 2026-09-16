@@ -160,11 +160,17 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   const findUnidade = (item: RecolhimentoItem) => findUnidadeForItem(unidades, item);
 
   // Ver o boleto sem sair do Munago — abre um preview embutido (iframe) em
-  // vez de só linkar pro ASAAS numa aba nova. bankSlipUrl é o PDF do boleto
-  // em si; invoiceUrl (página de fatura do ASAAS) entra só como fallback
-  // quando não tem PDF (cobrança Pix pura, por exemplo).
+  // vez de só linkar pro ASAAS numa aba nova. O ASAAS manda X-Frame-Options
+  // nas próprias páginas (confirmado), então um iframe apontando direto pra
+  // asaas.com sempre fica em branco, sem erro nenhum visível em JS — por
+  // isso o PDF do boleto (bankSlipUrl) passa pelo proxy /api/asaas/boleto-pdf
+  // (mesma origem do Munago, sem o header do ASAAS chegando ao navegador).
+  // A página de fatura (invoiceUrl) é interativa — não dá pra proxyar sem
+  // quebrar (scripts/relativos dela apontariam pro domínio errado), então
+  // só entra como link "abrir no ASAAS" quando não existe boleto em PDF
+  // (cobrança Pix pura, por exemplo).
   const [boletoViewer, setBoletoViewer] = useState<
-    { title: string; loading: boolean; url?: string; fallbackUrl?: string; error?: string } | null
+    { title: string; loading: boolean; url?: string; fallbackUrl?: string; error?: string; noPdf?: boolean } | null
   >(null);
 
   const openBoletoViewer = async (item: RecolhimentoItem) => {
@@ -187,12 +193,17 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
         setBoletoViewer({ title: item.franquia, loading: false, error: data.error || 'Falha ao buscar o boleto no ASAAS.', fallbackUrl: fallback });
         return;
       }
-      setBoletoViewer({
-        title: item.franquia,
-        loading: false,
-        url: data.bankSlipUrl || data.invoiceUrl || fallback,
-        fallbackUrl: data.invoiceUrl || fallback,
-      });
+      const invoiceUrl = data.invoiceUrl || fallback;
+      if (data.bankSlipUrl) {
+        setBoletoViewer({
+          title: item.franquia,
+          loading: false,
+          url: `/api/asaas/boleto-pdf?url=${encodeURIComponent(data.bankSlipUrl)}`,
+          fallbackUrl: invoiceUrl,
+        });
+      } else {
+        setBoletoViewer({ title: item.franquia, loading: false, noPdf: true, fallbackUrl: invoiceUrl });
+      }
     } catch {
       setBoletoViewer({ title: item.franquia, loading: false, error: 'Falha ao comunicar com a API do ASAAS.', fallbackUrl: fallback });
     }
@@ -1287,6 +1298,11 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                 </div>
               ) : boletoViewer.url ? (
                 <iframe src={boletoViewer.url} title={`Boleto — ${boletoViewer.title}`} className="w-full h-full border-0" />
+              ) : boletoViewer.noPdf ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6 text-slate-400 dark:text-slate-500">
+                  <QrCode className="w-6 h-6" />
+                  <p className="text-xs font-bold">Essa cobrança é só Pix — sem PDF de boleto pra mostrar aqui.</p>
+                </div>
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500">
                   Boleto ainda não disponível pra essa cobrança.
@@ -1296,7 +1312,9 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
 
             {!boletoViewer.loading && boletoViewer.fallbackUrl && (
               <div className="p-3 border-t border-slate-100 dark:border-slate-800 shrink-0 flex items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-800/50">
-                <p className="text-[10px] text-slate-400 dark:text-slate-500">Não carregou? O ASAAS pode bloquear a exibição embutida.</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                  {boletoViewer.noPdf ? 'Abra a fatura no ASAAS pra ver o QR Code Pix.' : 'Não carregou? O ASAAS pode bloquear a exibição embutida.'}
+                </p>
                 <a
                   href={boletoViewer.fallbackUrl}
                   target="_blank"

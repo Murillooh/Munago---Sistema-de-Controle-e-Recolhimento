@@ -1190,6 +1190,38 @@ export async function createApp() {
     }
   });
 
+  // Proxy do PDF do boleto — o ASAAS manda X-Frame-Options: SAMEORIGIN nas
+  // páginas dele (confirmado testando), então um <iframe src="...asaas.com">
+  // direto no Munago fica sempre em branco (o navegador recusa, sem erro
+  // nenhum visível em JS). Buscando o PDF aqui no servidor e servindo com
+  // nosso próprio domínio, o iframe passa a carregar same-origin — o
+  // X-Frame-Options do ASAAS nunca chega até o navegador do usuário.
+  app.get('/api/asaas/boleto-pdf', async (req, res) => {
+    const rawUrl = String(req.query.url || '');
+    let target: URL;
+    try {
+      target = new URL(rawUrl);
+    } catch {
+      return res.status(400).json({ error: 'URL inválida.' });
+    }
+    // Só deixa proxyar domínio do próprio ASAAS — sem isso, esta rota vira
+    // um proxy aberto pra qualquer URL (risco de SSRF).
+    if (!/(^|\.)asaas\.com$/i.test(target.hostname)) {
+      return res.status(400).json({ error: 'Só é permitido buscar boletos do domínio asaas.com.' });
+    }
+    try {
+      const response = await fetch(target.toString());
+      if (!response.ok) {
+        return res.status(response.status).json({ error: 'Falha ao buscar o boleto no ASAAS.' });
+      }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      res.setHeader('Content-Type', response.headers.get('content-type') || 'application/pdf');
+      res.send(buffer);
+    } catch (err: any) {
+      res.status(502).json({ error: 'Falha ao comunicar com a API do ASAAS: ' + err.message });
+    }
+  });
+
   // Get ASAAS Payment Status
   app.post('/api/asaas/get-payment-status', async (req, res) => {
     const { apiKey, sandbox, paymentId } = req.body;
