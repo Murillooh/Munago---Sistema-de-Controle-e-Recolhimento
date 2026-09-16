@@ -26,6 +26,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { DynamicTable } from './DynamicTable';
 import { ConfirmDialog } from './ConfirmDialog';
+import { DatePicker } from './DatePicker';
 import { exportToExcel, exportToPDF, parseExcelFile } from '../utils/exportImport';
 import { findUnidadeForItem } from '../utils/unidades';
 import { Unidade, BaseCategory } from '../types';
@@ -215,7 +216,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
     const pendingWithAsaas = items.filter(i => i.status === 'Aguardando pagamento' && i.asaasId);
 
     if (pendingWithAsaas.length === 0) {
-      alert('Nenhuma cobrança pendente com vínculo ASAAS encontrada para sincronizar.');
+      showToast('error', 'Nenhuma cobrança pendente com vínculo ASAAS encontrada para sincronizar.');
       return;
     }
 
@@ -262,7 +263,13 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
         }
       }
       const skippedMsg = skippedNoKey > 0 ? ` ${skippedNoKey} ignorado(s) por falta de chave ASAAS na unidade (Bases > Unidades).` : '';
-      alert(`Sincronização concluída! ${updatedCount} status atualizados.${skippedMsg}`);
+      // Erro só quando nada pôde nem ser checado (todas as cobranças sem
+      // chave) — 0 atualizados sozinho é normal (já estava tudo em dia).
+      const nothingCheckable = skippedNoKey === pendingWithAsaas.length;
+      showToast(
+        nothingCheckable ? 'error' : 'success',
+        `Sincronização concluída — ${updatedCount} status atualizado${updatedCount !== 1 ? 's' : ''}.${skippedMsg}`
+      );
     } finally {
       setIsSyncing(false);
     }
@@ -436,7 +443,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.franquia || !formData.valor) {
-      alert('Por favor, preencha a Franquia e o Valor.');
+      showToast('error', 'Por favor, preencha a Franquia e o Valor.');
       return;
     }
 
@@ -738,20 +745,12 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
           {/* Grid Filters */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
             <div className="flex gap-2">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="min-w-0 flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-[11px] font-bold text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-blue-500 outline-none cursor-pointer"
-                title="Data Inicial"
-              />
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="min-w-0 flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-[11px] font-bold text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-blue-500 outline-none cursor-pointer"
-                title="Data Final"
-              />
+              <div className="min-w-0 flex-1">
+                <DatePicker value={startDate} onChange={setStartDate} title="Data Inicial" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <DatePicker value={endDate} onChange={setEndDate} title="Data Final" />
+              </div>
             </div>
 
             <select
