@@ -22,6 +22,8 @@ import {
   MapPin,
   Clock,
   XCircle,
+  Folder,
+  FolderOpen,
 } from 'lucide-react';
 import { findUnidadeForItem, ASAAS_AUTO_IMPORT_INTERVAL_MS } from '../utils/unidades';
 
@@ -356,7 +358,34 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   // Recebida/Confirmada já foi paga — não faz sentido gerar cobrança nova.
   const isBillableStatus = (status: string) => status === 'Aguardando pagamento' || status === 'Atrasado';
 
-  const pendingItems = items.filter((i) => i.status === 'Aguardando pagamento');
+  // "Pastas" por unidade (Canindé, Barueri, Limão, Zona Sul...) — mesmo
+  // critério de match usado pra achar a chave ASAAS (CNPJ, com fallback por
+  // C. Custo). Lançamento que não bate com nenhuma unidade cai na pasta
+  // "Sem unidade" em vez de sumir da visão por pasta.
+  const folderGroups = useMemo(() => {
+    const groups = unidades.map((u) => ({
+      id: u.id,
+      label: u.nome,
+      items: items.filter((i) => findUnidadeForItem(unidades, i)?.id === u.id),
+    }));
+    const semUnidade = items.filter((i) => !findUnidadeForItem(unidades, i));
+    if (semUnidade.length > 0) {
+      groups.push({ id: '__sem_unidade__', label: 'Sem unidade', items: semUnidade });
+    }
+    return groups;
+  }, [items, unidades]);
+
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const selectedFolderLabel = folderGroups.find((g) => g.id === selectedFolder)?.label;
+
+  // Fonte de itens depois de aplicar a pasta selecionada (antes da busca) —
+  // null = todas as pastas juntas, comportamento de antes.
+  const folderItems = useMemo(() => {
+    if (!selectedFolder) return items;
+    return folderGroups.find((g) => g.id === selectedFolder)?.items || [];
+  }, [items, folderGroups, selectedFolder]);
+
+  const pendingItems = folderItems.filter((i) => i.status === 'Aguardando pagamento');
 
   // Sem busca, mostra só quem está realmente aguardando pagamento (visão
   // padrão, sem poluir com franquias já pagas). Com busca, procura em TODOS
@@ -370,14 +399,14 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
     const q = search.trim().toLowerCase();
     if (!q) return pendingItems;
     const qDigits = onlyDigits(q);
-    return items.filter((i) => {
+    return folderItems.filter((i) => {
       if (i.franquia.toLowerCase().includes(q)) return true;
       if (qDigits && onlyDigits(i.cnpj).includes(qDigits)) return true;
       return [i.cCusto, i.status, i.competenciaRecolhimento, i.competenciaPagamento, i.vencimento, i.descricao]
         .filter(Boolean)
         .some((field) => field.toLowerCase().includes(q));
     });
-  }, [items, pendingItems, search]);
+  }, [folderItems, pendingItems, search]);
 
   // Só entra na seleção/lote quem realmente pode ser gerado agora — item já
   // emitido, sem chave de unidade, ou já pago não tem o que fazer num "gerar em lote".
@@ -509,12 +538,62 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
         <span>Modo PRODUÇÃO — toda cobrança gerada aqui é real, com dinheiro de verdade envolvido.</span>
       </div>
 
+      {/* Pastas por unidade — clica pra ver só os boletos daquela franquia/região */}
+      {folderGroups.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pastas por unidade</h3>
+            {selectedFolder && (
+              <button
+                onClick={() => setSelectedFolder(null)}
+                className="text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Ver todas
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2.5">
+            {folderGroups.map((group) => {
+              const isSelected = selectedFolder === group.id;
+              const valorTotal = group.items.reduce((s, i) => s + (i.valor || 0), 0);
+              const pendentesCount = group.items.filter((i) => isBillableStatus(i.status)).length;
+              return (
+                <button
+                  key={group.id}
+                  onClick={() => setSelectedFolder(isSelected ? null : group.id)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all text-left ${
+                    isSelected
+                      ? 'bg-emerald-600 border-emerald-500 text-white shadow-md shadow-emerald-600/20'
+                      : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-emerald-300 dark:hover:border-emerald-700'
+                  }`}
+                >
+                  {isSelected ? <FolderOpen className="w-5 h-5 shrink-0" /> : <Folder className="w-5 h-5 shrink-0 text-amber-500" />}
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold truncate">{group.label}</p>
+                    <p className={`text-[10px] mt-0.5 ${isSelected ? 'text-emerald-100' : 'text-slate-400 dark:text-slate-500'}`}>
+                      {group.items.length} boleto{group.items.length !== 1 ? 's' : ''} • R$ {valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      {pendentesCount > 0 ? ` • ${pendentesCount} pendente${pendentesCount !== 1 ? 's' : ''}` : ''}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Pending Items for ASAAS Billing */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
         <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Gerar Cobranças Pix / Boleto (ASAAS)</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Selecione uma ou várias franquias pendentes para emitir cobrança via API do ASAAS.</p>
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              Gerar Cobranças Pix / Boleto (ASAAS){selectedFolderLabel ? ` — ${selectedFolderLabel}` : ''}
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {selectedFolderLabel
+                ? `Mostrando só os boletos da pasta "${selectedFolderLabel}".`
+                : 'Selecione uma ou várias franquias pendentes para emitir cobrança via API do ASAAS.'}
+            </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <span className="bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 text-xs font-bold px-3 py-1 rounded-full border border-amber-200 dark:border-amber-800/50">
@@ -558,7 +637,9 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
           {filteredPendingItems.length === 0 ? (
             <div className="p-12 text-center text-slate-400 dark:text-slate-500 text-xs">
               {search.trim()
-                ? `Nenhuma franquia encontrada para "${search}".`
+                ? `Nenhuma franquia encontrada para "${search}"${selectedFolderLabel ? ` na pasta "${selectedFolderLabel}"` : ''}.`
+                : selectedFolderLabel
+                ? `Nenhum boleto na pasta "${selectedFolderLabel}" no momento.`
                 : 'Nenhuma franquia com pagamento pendente no momento para envio ao ASAAS.'}
             </div>
           ) : (
