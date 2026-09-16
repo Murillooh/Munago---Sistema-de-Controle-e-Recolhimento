@@ -1,13 +1,51 @@
 import React, { useState } from 'react';
 import { GoalSettings, RecolhimentoItem, DetailedGoal } from '../types';
-import { Target, Save, Mail, Bell, ShieldCheck, Award, Plus, Trash2, X, Settings2, Calendar, Tag, DollarSign, Clock, CalendarClock, ListChecks } from 'lucide-react';
+import { Target, Save, Mail, Bell, ShieldCheck, Award, Plus, Trash2, X, DollarSign, Clock, CalendarClock, ListChecks, PartyPopper, PieChart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { DatePicker } from './DatePicker';
 
 interface MetasViewProps {
   goalSettings: GoalSettings;
   onUpdateGoalSettings: (settings: GoalSettings) => void;
   items: RecolhimentoItem[];
 }
+
+// Cor por categoria — dá identidade visual a cada meta no grid e nos botões
+// do modal, em vez de todo cartão sair igual só com o nome mudando.
+const CATEGORY_STYLES: Record<string, { text: string; bg: string; ring: string; dot: string; gradient: string }> = {
+  Royalties: {
+    text: 'text-blue-600 dark:text-blue-400',
+    bg: 'bg-blue-50 dark:bg-blue-950/40',
+    ring: 'ring-blue-500/20',
+    dot: 'bg-blue-500',
+    gradient: 'from-blue-500 to-indigo-500',
+  },
+  Taxa: {
+    text: 'text-amber-600 dark:text-amber-400',
+    bg: 'bg-amber-50 dark:bg-amber-950/30',
+    ring: 'ring-amber-500/20',
+    dot: 'bg-amber-500',
+    gradient: 'from-amber-500 to-orange-500',
+  },
+  'Fundo de Propaganda': {
+    text: 'text-purple-600 dark:text-purple-400',
+    bg: 'bg-purple-50 dark:bg-purple-950/30',
+    ring: 'ring-purple-500/20',
+    dot: 'bg-purple-500',
+    gradient: 'from-purple-500 to-fuchsia-500',
+  },
+  Outros: {
+    text: 'text-slate-600 dark:text-slate-400',
+    bg: 'bg-slate-100 dark:bg-slate-800',
+    ring: 'ring-slate-400/20',
+    dot: 'bg-slate-400',
+    gradient: 'from-slate-500 to-slate-600',
+  },
+};
+const DEFAULT_CATEGORY_STYLE = CATEGORY_STYLES.Outros;
+const categoryStyle = (cat?: string) => (cat && CATEGORY_STYLES[cat]) || DEFAULT_CATEGORY_STYLE;
+
+const formatMoney = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
 
 export const MetasView: React.FC<MetasViewProps> = ({
   goalSettings,
@@ -24,10 +62,13 @@ export const MetasView: React.FC<MetasViewProps> = ({
     .filter((i) => i.status === 'Confirmada' || i.status === 'Recebida')
     .reduce((sum, i) => sum + (i.valor || 0), 0);
 
-  const progress = Math.min(
-    Math.round((confirmedValue / formData.monthlyGoal) * 100),
-    100
-  );
+  const rawProgress = formData.monthlyGoal > 0 ? (confirmedValue / formData.monthlyGoal) * 100 : 0;
+  const progress = Math.min(Math.round(rawProgress), 100);
+  // Meta batida e ultrapassada: em vez de travar em "100% / falta R$ 0,00"
+  // (parecia quebrado com 224k confirmado numa meta de 15k), mostra quanto
+  // passou de verdade.
+  const overshootPercent = Math.max(Math.round(rawProgress) - 100, 0);
+  const goalReached = formData.monthlyGoal > 0 && confirmedValue >= formData.monthlyGoal;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +96,7 @@ export const MetasView: React.FC<MetasViewProps> = ({
   const handleSaveGoal = () => {
     let newDetailed: DetailedGoal[];
     if (editingGoal) {
-      newDetailed = (formData.detailedGoals || []).map(g => 
+      newDetailed = (formData.detailedGoals || []).map(g =>
         g.id === editingGoal.id ? { ...g, ...tempGoal } as DetailedGoal : g
       );
     } else {
@@ -70,12 +111,12 @@ export const MetasView: React.FC<MetasViewProps> = ({
     }
 
     const totalValue = newDetailed.reduce((sum, g) => sum + g.value, 0);
-    const updated = { 
-      ...formData, 
+    const updated = {
+      ...formData,
       detailedGoals: newDetailed,
-      monthlyGoal: totalValue > 0 ? totalValue : formData.monthlyGoal 
+      monthlyGoal: totalValue > 0 ? totalValue : formData.monthlyGoal
     };
-    
+
     setFormData(updated);
     onUpdateGoalSettings(updated);
     setIsModalOpen(false);
@@ -86,10 +127,10 @@ export const MetasView: React.FC<MetasViewProps> = ({
   const handleDeleteGoal = (id: string) => {
     const newDetailed = (formData.detailedGoals || []).filter(g => g.id !== id);
     const totalValue = newDetailed.reduce((sum, g) => sum + g.value, 0);
-    const updated = { 
-      ...formData, 
+    const updated = {
+      ...formData,
       detailedGoals: newDetailed,
-      monthlyGoal: totalValue > 0 ? totalValue : formData.monthlyGoal 
+      monthlyGoal: totalValue > 0 ? totalValue : formData.monthlyGoal
     };
     setFormData(updated);
     onUpdateGoalSettings(updated);
@@ -98,33 +139,45 @@ export const MetasView: React.FC<MetasViewProps> = ({
   const activeGoalsCount = formData.detailedGoals?.length || 0;
   const remainingValue = Math.max(formData.monthlyGoal - confirmedValue, 0);
 
+  // Soma por categoria — só pra desenhar a barrinha de composição da meta
+  // total no card de resumo (dado 100% derivado da própria configuração,
+  // sem inventar relação com lançamentos).
+  const categoryBreakdown = (formData.detailedGoals || []).reduce<Record<string, number>>((acc, g) => {
+    const key = g.category || 'Outros';
+    acc[key] = (acc[key] || 0) + g.value;
+    return acc;
+  }, {});
+  const totalDetailedValue = Object.values(categoryBreakdown).reduce((s, v) => s + v, 0);
+
   return (
     <div className="w-full space-y-6 pb-12">
-      <div className="grid grid-cols-1 2xl:grid-cols-[1fr_360px] gap-6 items-start">
-      {/* Left column: goals, config */}
-      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-              <Target className="w-5 h-5" />
+      {/* Header Banner */}
+      <div className="bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-20 -mt-20 blur-3xl" />
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <div className="inline-flex items-center space-x-2 bg-white/15 text-blue-100 px-3 py-1 rounded-full text-xs font-semibold mb-2 backdrop-blur-md">
+              <Target className="w-3.5 h-3.5" />
+              <span>Planejamento Financeiro</span>
             </div>
-            <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Metas de Arrecadação</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Acompanhe e configure seus objetivos financeiros.
-              </p>
-            </div>
+            <h2 className="text-2xl font-bold">Metas de Arrecadação</h2>
+            <p className="text-blue-100 text-sm mt-1 max-w-2xl">
+              Acompanhe e configure seus objetivos financeiros de {formData.targetYear}.
+            </p>
           </div>
-          
           <button
             onClick={() => handleOpenModal()}
-            className="flex items-center justify-center space-x-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-500/20"
+            className="flex items-center justify-center space-x-2 px-5 py-2.5 bg-white text-blue-700 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg transition-all hover:scale-[1.03] active:scale-95"
           >
             <Plus className="w-4 h-4" />
             <span>Nova Meta</span>
           </button>
         </div>
+      </div>
 
+      <div className="grid grid-cols-1 2xl:grid-cols-[1fr_360px] gap-6 items-start">
+      {/* Left column: goals, config */}
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
         {successMessage && (
           <div className="mb-6 p-3 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/50 text-emerald-700 dark:text-emerald-300 text-xs rounded-xl font-semibold flex items-center space-x-2">
             <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -135,28 +188,32 @@ export const MetasView: React.FC<MetasViewProps> = ({
         {/* Individual Goals Grid (Quadradinhos) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           {formData.detailedGoals && formData.detailedGoals.length > 0 ? (
-            formData.detailedGoals.map((goal) => (
+            formData.detailedGoals.map((goal) => {
+              const style = categoryStyle(goal.category);
+              const share = totalDetailedValue > 0 ? Math.round((goal.value / totalDetailedValue) * 100) : 0;
+              return (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 key={goal.id}
                 onClick={() => handleOpenModal(goal)}
-                className="p-5 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between group hover:border-blue-400 dark:hover:border-blue-500 transition-all cursor-pointer relative overflow-hidden"
+                className="p-5 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between group hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/5 transition-all cursor-pointer relative overflow-hidden"
               >
-                <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full -mr-12 -mt-12" />
-                
+                <div className={`absolute top-0 right-0 w-24 h-24 ${style.bg} rounded-full -mr-12 -mt-12 opacity-60`} />
+
                 <div className="flex justify-between items-start relative z-10 mb-4">
                   <div className="flex items-center space-x-2">
-                    <div className="p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 text-blue-600 dark:text-blue-400 shadow-sm group-hover:scale-110 transition-transform">
+                    <div className={`p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 ${style.text} shadow-sm group-hover:scale-110 transition-transform`}>
                       <Target className="w-4 h-4" />
                     </div>
                     {goal.category && (
-                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-900 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-800">
+                      <span className={`flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest ${style.text} ${style.bg} px-2 py-1 rounded-md`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
                         {goal.category}
                       </span>
                     )}
                   </div>
-                  <button 
+                  <button
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDeleteGoal(goal.id);
@@ -166,14 +223,25 @@ export const MetasView: React.FC<MetasViewProps> = ({
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
-                
+
                 <div className="relative z-10 space-y-3">
                   <div>
                     <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
                       {goal.name || 'Meta s/ nome'}
                     </h4>
                     <p className="text-xl font-black text-slate-900 dark:text-white mt-1">
-                      R$ {goal.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      {formatMoney(goal.value)}
+                    </p>
+                  </div>
+
+                  {/* Fatia dessa meta dentro do total configurado — dado derivado só
+                      das metas cadastradas, sem tentar casar com lançamentos. */}
+                  <div>
+                    <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full bg-gradient-to-r ${style.gradient}`} style={{ width: `${share}%` }} />
+                    </div>
+                    <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 mt-1 uppercase tracking-widest">
+                      {share}% da meta total
                     </p>
                   </div>
 
@@ -185,9 +253,10 @@ export const MetasView: React.FC<MetasViewProps> = ({
                   )}
                 </div>
               </motion.div>
-            ))
+              );
+            })
           ) : (
-            <div 
+            <div
               onClick={() => handleOpenModal()}
               className="col-span-full py-16 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-all group"
             >
@@ -210,17 +279,20 @@ export const MetasView: React.FC<MetasViewProps> = ({
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   Meta Total Mensal (R$)
                 </label>
-                <input
-                  type="number"
-                  step="100"
-                  value={formData.monthlyGoal}
-                  readOnly={formData.detailedGoals && formData.detailedGoals.length > 0}
-                  onChange={(e) =>
-                    setFormData({ ...formData, monthlyGoal: parseFloat(e.target.value) || 0 })
-                  }
-                  className={`w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/20 ${formData.detailedGoals && formData.detailedGoals.length > 0 ? 'opacity-70 cursor-not-allowed' : ''}`}
-                  required
-                />
+                <div className="relative">
+                  <DollarSign className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  <input
+                    type="number"
+                    step="100"
+                    value={formData.monthlyGoal}
+                    readOnly={formData.detailedGoals && formData.detailedGoals.length > 0}
+                    onChange={(e) =>
+                      setFormData({ ...formData, monthlyGoal: parseFloat(e.target.value) || 0 })
+                    }
+                    className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/20 outline-none ${formData.detailedGoals && formData.detailedGoals.length > 0 ? 'opacity-70 cursor-not-allowed' : ''}`}
+                    required
+                  />
+                </div>
                 {formData.detailedGoals && formData.detailedGoals.length > 0 && (
                   <p className="text-[10px] text-blue-500 mt-1.5 font-medium">
                     Calculado automaticamente pelas metas acima.
@@ -230,15 +302,18 @@ export const MetasView: React.FC<MetasViewProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Ano de Exercício</label>
-                <input
-                  type="number"
-                  value={formData.targetYear}
-                  onChange={(e) =>
-                    setFormData({ ...formData, targetYear: parseInt(e.target.value) || 2026 })
-                  }
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/20"
-                  required
-                />
+                <div className="relative">
+                  <CalendarClock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  <input
+                    type="number"
+                    value={formData.targetYear}
+                    onChange={(e) =>
+                      setFormData({ ...formData, targetYear: parseInt(e.target.value) || 2026 })
+                    }
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                    required
+                  />
+                </div>
               </div>
 
               <div>
@@ -251,7 +326,7 @@ export const MetasView: React.FC<MetasViewProps> = ({
                     type="email"
                     value={formData.alertEmail}
                     onChange={(e) => setFormData({ ...formData, alertEmail: e.target.value })}
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/20"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/20 outline-none"
                     required
                   />
                 </div>
@@ -295,30 +370,35 @@ export const MetasView: React.FC<MetasViewProps> = ({
       {/* Right column: performance + quick summary, sticky on wide screens */}
       <div className="space-y-6 2xl:sticky 2xl:top-6">
         {/* Progress Card */}
-        <div className="bg-blue-600 rounded-3xl p-6 text-white relative overflow-hidden shadow-2xl shadow-blue-500/20">
-          <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-40 h-40 bg-blue-400/20 rounded-full -ml-10 -mb-10 blur-2xl" />
+        <div className={`rounded-2xl p-5 text-white relative overflow-hidden shadow-xl ${goalReached ? 'bg-gradient-to-br from-emerald-600 to-emerald-700 shadow-emerald-500/20' : 'bg-blue-600 shadow-blue-500/20'}`}>
+          <div className="absolute top-0 right-0 w-36 h-36 bg-white/10 rounded-full -mr-12 -mt-12 blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-28 h-28 bg-white/10 rounded-full -ml-8 -mb-8 blur-2xl" />
 
-          <div className="relative z-10 space-y-5">
-            <div className="inline-flex items-center space-x-2 px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest">
-              <Award className="w-3 h-3" />
-              <span>Desempenho Atual</span>
+          <div className="relative z-10 space-y-4">
+            <div className="inline-flex items-center space-x-1.5 px-2.5 py-1 bg-white/20 backdrop-blur-md rounded-full text-[9px] font-black uppercase tracking-widest">
+              {goalReached ? <PartyPopper className="w-3 h-3" /> : <Award className="w-3 h-3" />}
+              <span>{goalReached ? 'Meta Batida' : 'Desempenho Atual'}</span>
             </div>
 
             <div className="flex items-end justify-between gap-3">
-              <div>
-                <h3 className="text-2xl font-black leading-tight">
-                  R$ {confirmedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              <div className="min-w-0">
+                <h3 className="text-xl font-black leading-tight truncate">
+                  {formatMoney(confirmedValue)}
                 </h3>
-                <p className="text-blue-100 text-xs font-medium mt-1">
+                <p className="text-white/80 text-[11px] font-medium mt-1">
                   Confirmado em {formData.targetYear}
                 </p>
               </div>
-              <div className="text-3xl font-black shrink-0">{progress}%</div>
+              <div className="text-right shrink-0">
+                <div className="text-2xl font-black">{progress}%</div>
+                {overshootPercent > 0 && (
+                  <div className="text-[9px] font-black text-white/80 uppercase tracking-widest">+{overshootPercent}% acima</div>
+                )}
+              </div>
             </div>
 
             <div>
-              <div className="w-full bg-white/20 h-3 rounded-full overflow-hidden backdrop-blur-sm">
+              <div className="w-full bg-white/20 h-2.5 rounded-full overflow-hidden backdrop-blur-sm">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${progress}%` }}
@@ -326,26 +406,30 @@ export const MetasView: React.FC<MetasViewProps> = ({
                   className="bg-white h-full rounded-full shadow-[0_0_20px_rgba(255,255,255,0.4)]"
                 />
               </div>
-              <div className="flex justify-between mt-2.5 text-[9px] font-black text-blue-100 uppercase tracking-widest">
+              <div className="flex justify-between mt-2 text-[9px] font-black text-white/80 uppercase tracking-widest">
                 <span>R$ 0,00</span>
-                <span>Meta: R$ {formData.monthlyGoal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                <span>Meta: {formatMoney(formData.monthlyGoal)}</span>
               </div>
             </div>
 
-            <div className="pt-4 border-t border-white/15 flex items-center justify-between">
-              <span className="text-[10px] font-bold text-blue-100 uppercase tracking-widest">Falta pra bater a meta</span>
-              <span className="text-sm font-black">R$ {remainingValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+            <div className="pt-3 border-t border-white/15 flex items-center justify-between gap-2">
+              <span className="text-[9px] font-bold text-white/80 uppercase tracking-widest">
+                {goalReached ? 'Excedente sobre a meta' : 'Falta pra bater a meta'}
+              </span>
+              <span className="text-xs font-black shrink-0">
+                {goalReached ? formatMoney(confirmedValue - formData.monthlyGoal) : formatMoney(remainingValue)}
+              </span>
             </div>
           </div>
         </div>
 
         {/* Quick Summary */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-5 space-y-4">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 space-y-3">
           <h4 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Resumo Rápido</h4>
 
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 text-slate-500 dark:text-slate-400">
-              <ListChecks className="w-4 h-4 text-blue-500" />
+              <ListChecks className="w-3.5 h-3.5 text-blue-500" />
               <span className="text-xs font-semibold">Metas ativas</span>
             </div>
             <span className="text-sm font-black text-slate-900 dark:text-slate-100">{activeGoalsCount}</span>
@@ -353,7 +437,7 @@ export const MetasView: React.FC<MetasViewProps> = ({
 
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 text-slate-500 dark:text-slate-400">
-              <CalendarClock className="w-4 h-4 text-blue-500" />
+              <CalendarClock className="w-3.5 h-3.5 text-blue-500" />
               <span className="text-xs font-semibold">Ano de exercício</span>
             </div>
             <span className="text-sm font-black text-slate-900 dark:text-slate-100">{formData.targetYear}</span>
@@ -361,7 +445,7 @@ export const MetasView: React.FC<MetasViewProps> = ({
 
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 text-slate-500 dark:text-slate-400">
-              <Bell className="w-4 h-4 text-blue-500" />
+              <Bell className="w-3.5 h-3.5 text-blue-500" />
               <span className="text-xs font-semibold">Alertas inteligentes</span>
             </div>
             <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${
@@ -372,6 +456,35 @@ export const MetasView: React.FC<MetasViewProps> = ({
               {formData.enableNotifications ? 'Ativos' : 'Desativados'}
             </span>
           </div>
+
+          {totalDetailedValue > 0 && (
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center space-x-2 text-slate-500 dark:text-slate-400 mb-2.5">
+                <PieChart className="w-4 h-4 text-blue-500" />
+                <span className="text-xs font-semibold">Composição da meta</span>
+              </div>
+              <div className="w-full h-2 rounded-full overflow-hidden flex bg-slate-100 dark:bg-slate-800">
+                {Object.entries(categoryBreakdown).map(([cat, val]) => (
+                  <div
+                    key={cat}
+                    className={`h-full bg-gradient-to-r ${categoryStyle(cat).gradient}`}
+                    style={{ width: `${(val / totalDetailedValue) * 100}%` }}
+                    title={`${cat}: ${formatMoney(val)}`}
+                  />
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-2.5">
+                {Object.entries(categoryBreakdown).map(([cat, val]) => (
+                  <div key={cat} className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                    <span className={`w-1.5 h-1.5 rounded-full ${categoryStyle(cat).dot}`} />
+                    <span>{cat}</span>
+                    <span className="text-slate-300 dark:text-slate-600">·</span>
+                    <span>{Math.round((val / totalDetailedValue) * 100)}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
       </div>
@@ -446,34 +559,35 @@ export const MetasView: React.FC<MetasViewProps> = ({
                     </div>
                     <div>
                       <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Prazo Final</label>
-                      <div className="relative">
-                        <Calendar className="w-4 h-4 text-slate-400 absolute left-4 top-3.5" />
-                        <input
-                          type="date"
-                          value={tempGoal.deadline}
-                          onChange={(e) => setTempGoal({ ...tempGoal, deadline: e.target.value })}
-                          className="w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-bold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/20 transition-all"
-                        />
-                      </div>
+                      <DatePicker
+                        value={tempGoal.deadline || ''}
+                        onChange={(v) => setTempGoal({ ...tempGoal, deadline: v })}
+                        className="w-full flex items-center gap-2 pl-4 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-bold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/20 outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-all"
+                      />
                     </div>
                   </div>
 
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Categoria</label>
                     <div className="relative flex flex-wrap gap-2 mt-2">
-                      {['Royalties', 'Taxa', 'Fundo de Propaganda', 'Outros'].map((cat) => (
-                        <button
-                          key={cat}
-                          onClick={() => setTempGoal({ ...tempGoal, category: cat })}
-                          className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border ${
-                            tempGoal.category === cat 
-                              ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20' 
-                              : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                          }`}
-                        >
-                          {cat}
-                        </button>
-                      ))}
+                      {['Royalties', 'Taxa', 'Fundo de Propaganda', 'Outros'].map((cat) => {
+                        const style = categoryStyle(cat);
+                        const active = tempGoal.category === cat;
+                        return (
+                          <button
+                            key={cat}
+                            onClick={() => setTempGoal({ ...tempGoal, category: cat })}
+                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border ${
+                              active
+                                ? `bg-gradient-to-r ${style.gradient} border-transparent text-white shadow-lg`
+                                : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-white' : style.dot}`} />
+                            {cat}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
