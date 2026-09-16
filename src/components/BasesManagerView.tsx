@@ -1,11 +1,15 @@
 import React, { useRef, useState } from 'react';
 import { Unidade, BaseCategory } from '../types';
-import { Plus, Trash2, Edit2, Database, Building2, Tags, Save, X, Search, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, Database, Building2, Tags, Save, X, Search, CheckCircle2, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface BasesManagerViewProps {
   unidades: Unidade[];
   categorias: BaseCategory[];
+  // Unidades carregam a chave ASAAS — agora compartilhada entre todo mundo
+  // (ver App.tsx), então só admin pode criar/editar/excluir uma. Categorias
+  // não têm esse dado sensível, continuam liberadas pra qualquer um.
+  canEditUnidades: boolean;
   onAddUnidade: (u: Unidade) => void;
   onUpdateUnidade: (u: Unidade) => void;
   onDeleteUnidade: (id: string) => void;
@@ -17,6 +21,7 @@ interface BasesManagerViewProps {
 export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
   unidades,
   categorias,
+  canEditUnidades,
   onAddUnidade,
   onUpdateUnidade,
   onDeleteUnidade,
@@ -88,7 +93,9 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
     showToast(`${label} excluída com sucesso.`);
   };
 
-  const filteredUnidades = unidades.filter(u => 
+  const canEdit = activeSubTab === 'unidades' ? canEditUnidades : true;
+
+  const filteredUnidades = unidades.filter(u =>
     u.nome.toLowerCase().includes(search.toLowerCase()) || 
     u.cnpj.includes(search)
   );
@@ -150,13 +157,20 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
             />
           </div>
           
-          <button
-            onClick={handleOpenAdd}
-            className="w-full sm:w-auto flex items-center justify-center space-x-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-blue-600/20 uppercase tracking-widest"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Adicionar {activeSubTab === 'unidades' ? 'Unidade' : 'Categoria'}</span>
-          </button>
+          {canEdit ? (
+            <button
+              onClick={handleOpenAdd}
+              className="w-full sm:w-auto flex items-center justify-center space-x-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-blue-600/20 uppercase tracking-widest"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Adicionar {activeSubTab === 'unidades' ? 'Unidade' : 'Categoria'}</span>
+            </button>
+          ) : (
+            <span className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-5 py-2 text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-widest">
+              <Lock className="w-3 h-3" />
+              Somente admin edita unidades
+            </span>
+          )}
         </div>
 
         {/* List Content */}
@@ -211,20 +225,24 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                       </td>
                     )}
                     <td className="py-4 px-6 text-right">
-                      <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button 
-                          onClick={() => handleOpenEdit(item)}
-                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-all"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      {canEdit ? (
+                        <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleOpenEdit(item)}
+                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <Lock className="w-3.5 h-3.5 text-slate-300 dark:text-slate-700 ml-auto" />
+                      )}
                     </td>
                   </tr>
                 ))

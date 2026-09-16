@@ -3,7 +3,7 @@ import express from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { GoogleGenAI } from '@google/genai';
-import { pool, initDb, rowToItem, rowToUser, rowToEstoqueItem } from './db.js';
+import { pool, initDb, rowToItem, rowToUser, rowToEstoqueItem, rowToUnidade } from './db.js';
 import { configureWebPush, getVapidPublicKey, sendPushToUser, runDeadlineAlertCheck } from './push.js';
 import { generateRecolhimentoReportPdf, RecolhimentoRecord } from './recolhimentoReport.js';
 import { generateEstoqueReportPdf, EstoqueRecord } from './estoqueReport.js';
@@ -568,6 +568,92 @@ export async function createApp() {
       res.json({ success: true, count: result.rowCount });
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao excluir itens de estoque em lote.', details: err.message });
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // Unidades (franquias/regiões) + chave ASAAS — compartilhadas entre TODOS
+  // os usuários aprovados (sem owner_id), diferente de recolhimentos/estoque.
+  // Qualquer usuário aprovado pode LER (precisa da chave pra gerar cobrança
+  // pelo próprio navegador); só admin pode escrever.
+  // ---------------------------------------------------------------------
+  app.get('/api/unidades', requireDb, requireAuth, async (req, res) => {
+    try {
+      const result = await pool!.query('SELECT * FROM unidades ORDER BY nome ASC');
+      res.json(result.rows.map(rowToUnidade));
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao buscar unidades.', details: err.message });
+    }
+  });
+
+  const unidadeToParams = (u: any) => [
+    u.id,
+    u.nome || '',
+    u.cnpj || '',
+    u.cCustoPadrao || '',
+    u.asaasApiKey || null,
+  ];
+
+  app.post('/api/unidades', requireDb, requireAdmin, async (req, res) => {
+    try {
+      const result = await pool!.query(
+        `INSERT INTO unidades (id, nome, cnpj, c_custo_padrao, asaas_api_key)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (id) DO NOTHING
+         RETURNING *`,
+        unidadeToParams(req.body)
+      );
+      if (result.rows.length === 0) return res.status(409).json({ error: 'Já existe uma unidade com este id.' });
+      res.json(rowToUnidade(result.rows[0]));
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao salvar unidade.', details: err.message });
+    }
+  });
+
+  // Migração única: se a tabela estiver vazia mas o navegador do admin já
+  // tinha unidades salvas localmente (era assim que funcionava antes),
+  // manda tudo de uma vez pra não perder o que já estava configurado.
+  app.post('/api/unidades/bulk', requireDb, requireAdmin, async (req, res) => {
+    try {
+      const list = Array.isArray(req.body) ? req.body : [];
+      const inserted: any[] = [];
+      for (const u of list) {
+        const result = await pool!.query(
+          `INSERT INTO unidades (id, nome, cnpj, c_custo_padrao, asaas_api_key)
+           VALUES ($1,$2,$3,$4,$5)
+           ON CONFLICT (id) DO NOTHING
+           RETURNING *`,
+          unidadeToParams(u)
+        );
+        inserted.push(...result.rows);
+      }
+      res.json({ success: true, count: inserted.length, unidades: inserted.map(rowToUnidade) });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao importar unidades.', details: err.message });
+    }
+  });
+
+  app.put('/api/unidades/:id', requireDb, requireAdmin, async (req, res) => {
+    try {
+      const result = await pool!.query(
+        `UPDATE unidades SET nome = $2, cnpj = $3, c_custo_padrao = $4, asaas_api_key = $5
+         WHERE id = $1
+         RETURNING *`,
+        unidadeToParams({ ...req.body, id: req.params.id })
+      );
+      if (result.rows.length === 0) return res.status(404).json({ error: 'Unidade não encontrada.' });
+      res.json(rowToUnidade(result.rows[0]));
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao atualizar unidade.', details: err.message });
+    }
+  });
+
+  app.delete('/api/unidades/:id', requireDb, requireAdmin, async (req, res) => {
+    try {
+      await pool!.query('DELETE FROM unidades WHERE id = $1', [req.params.id]);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao excluir unidade.', details: err.message });
     }
   });
 

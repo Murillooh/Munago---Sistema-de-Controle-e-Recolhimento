@@ -323,6 +323,88 @@ export default function App() {
     ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
   });
 
+  // Unidades (franquias + chave ASAAS) agora são compartilhadas entre todos
+  // os usuários, não mais por conta — antes cada login tinha sua própria
+  // cópia no localStorage, então uma chave ASAAS configurada por um usuário
+  // nunca aparecia pros outros. Poll igual items/estoque; na primeira vez
+  // que o servidor devolver a lista vazia mas já existir algo salvo
+  // localmente (era assim que funcionava antes), o admin logado migra tudo
+  // pro banco de uma vez, sem perder o que já estava configurado.
+  const unidadesMigratedRef = React.useRef(false);
+  useEffect(() => {
+    if (!isAuthenticated || !sessionToken) return;
+    let cancelled = false;
+
+    const loadUnidadesFromServer = async () => {
+      try {
+        const res = await fetch('/api/unidades', { headers: itemsAuthHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !Array.isArray(data)) return;
+
+        if (data.length === 0 && !unidadesMigratedRef.current && currentUser?.role === 'admin' && unidades.length > 0) {
+          unidadesMigratedRef.current = true;
+          try {
+            const migrateRes = await fetch('/api/unidades/bulk', {
+              method: 'POST',
+              headers: itemsAuthHeaders(),
+              body: JSON.stringify(unidades),
+            });
+            if (migrateRes.ok) {
+              const migrateData = await migrateRes.json();
+              if (!cancelled && Array.isArray(migrateData.unidades) && migrateData.unidades.length > 0) {
+                setUnidades(migrateData.unidades);
+              }
+              return;
+            }
+          } catch {
+            unidadesMigratedRef.current = false; // sem sorte agora — tenta de novo no próximo poll
+          }
+        }
+
+        if (data.length > 0) setUnidades(data);
+      } catch {
+        // API indisponível: mantém as unidades locais como estão.
+      }
+    };
+
+    loadUnidadesFromServer();
+    const unidadesInterval = setInterval(loadUnidadesFromServer, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(unidadesInterval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, sessionToken]);
+
+  // Escrita restrita a admin no servidor (requireAdmin) — a UI
+  // (BasesManagerView) já esconde os controles de criar/editar/excluir de
+  // quem não é admin, isso aqui é só a chamada de fato.
+  const handleAddUnidade = async (u: any) => {
+    setUnidades((prev) => [...prev, u]);
+    try {
+      const res = await fetch('/api/unidades', { method: 'POST', headers: itemsAuthHeaders(), body: JSON.stringify(u) });
+      if (res.ok) {
+        const saved = await res.json();
+        setUnidades((prev) => prev.map((item) => (item.id === u.id ? saved : item)));
+      }
+    } catch {
+      // fica só local até o próximo poll conseguir de novo
+    }
+  };
+
+  const handleUpdateUnidade = async (u: any) => {
+    setUnidades((prev) => prev.map((item) => (item.id === u.id ? u : item)));
+    fetch(`/api/unidades/${u.id}`, { method: 'PUT', headers: itemsAuthHeaders(), body: JSON.stringify(u) }).catch(() => {});
+  };
+
+  const handleDeleteUnidade = (id: string) => {
+    askConfirm('Excluir esta unidade? Essa ação não pode ser desfeita.', () => {
+      setUnidades((prev) => prev.filter((item) => item.id !== id));
+      fetch(`/api/unidades/${id}`, { method: 'DELETE', headers: itemsAuthHeaders() }).catch(() => {});
+    });
+  };
+
   useEffect(() => {
     if (!isAuthenticated || !sessionToken) return;
     let cancelled = false;
@@ -878,7 +960,7 @@ export default function App() {
                 onDeleteMultiple={handleDeleteMultiple}
                 onImportBulk={handleImportBulk}
                 unidades={unidades}
-                onAddUnidade={(u) => setUnidades(prev => [...prev, u])}
+                onAddUnidade={handleAddUnidade}
                 baseCategories={baseCategories}
                 onNavigateBases={() => setActiveTab('bases')}
                 searchTerm={searchTerm}
@@ -890,9 +972,10 @@ export default function App() {
               <BasesManagerView
                 unidades={unidades}
                 categorias={baseCategories}
-                onAddUnidade={(u) => setUnidades(prev => [...prev, u])}
-                onUpdateUnidade={(u) => setUnidades(prev => prev.map(item => item.id === u.id ? u : item))}
-                onDeleteUnidade={(id) => askConfirm('Excluir esta unidade? Essa ação não pode ser desfeita.', () => setUnidades(prev => prev.filter(item => item.id !== id)))}
+                canEditUnidades={currentUser?.role === 'admin'}
+                onAddUnidade={handleAddUnidade}
+                onUpdateUnidade={handleUpdateUnidade}
+                onDeleteUnidade={handleDeleteUnidade}
                 onAddCategoria={(c) => setBaseCategories(prev => [...prev, c])}
                 onUpdateCategoria={(c) => setBaseCategories(prev => prev.map(item => item.id === c.id ? c : item))}
                 onDeleteCategoria={(id) => askConfirm('Excluir esta categoria? Essa ação não pode ser desfeita.', () => setBaseCategories(prev => prev.filter(item => item.id !== id)))}

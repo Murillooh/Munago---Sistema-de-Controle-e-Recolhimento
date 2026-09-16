@@ -106,6 +106,28 @@ export function rowToEstoqueItem(row: EstoqueRow) {
   };
 }
 
+export interface UnidadeRow {
+  id: string;
+  nome: string;
+  cnpj: string;
+  c_custo_padrao: string | null;
+  asaas_api_key: string | null;
+}
+
+// A chave ASAAS precisa chegar no navegador de QUALQUER usuário aprovado —
+// é o cliente quem manda ela pro servidor em cada chamada de API do ASAAS
+// (create-charge, sync, etc). Só a ESCRITA (criar/editar/excluir Unidade)
+// é restrita a admin — ver requireAdmin nas rotas /api/unidades.
+export function rowToUnidade(row: UnidadeRow) {
+  return {
+    id: row.id,
+    nome: row.nome,
+    cnpj: row.cnpj,
+    cCustoPadrao: row.c_custo_padrao || undefined,
+    asaasApiKey: row.asaas_api_key || undefined,
+  };
+}
+
 export interface UserRow {
   id: string;
   name: string;
@@ -183,6 +205,19 @@ export function initDb(): Promise<void> {
         owner_id TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_estoque_items_owner_id ON estoque_items(owner_id);
+
+      -- Unidades (franquias/regiões), com CNPJ e chave ASAAS — COMPARTILHADA
+      -- entre todos os usuários (sem owner_id, ao contrário de recolhimentos/
+      -- estoque). Antes vivia só no localStorage de cada usuário: uma chave
+      -- ASAAS configurada por um login nunca aparecia nos outros. Escrita
+      -- (criar/editar/excluir) é restrita a admin nas rotas.
+      CREATE TABLE IF NOT EXISTS unidades (
+        id TEXT PRIMARY KEY,
+        nome TEXT NOT NULL,
+        cnpj TEXT DEFAULT '',
+        c_custo_padrao TEXT DEFAULT '',
+        asaas_api_key TEXT
+      );
 
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
