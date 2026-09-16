@@ -53,27 +53,39 @@ interface PushPayload {
 const PERMANENTLY_INVALID_STATUS_CODES = [400, 401, 403, 404, 410];
 
 // Manda a notificação pra todos os dispositivos inscritos do usuário; remove
-// do banco qualquer assinatura permanentemente inválida.
-export async function sendPushToUser(pool: Pool, userId: string, payload: PushPayload) {
+// do banco qualquer assinatura permanentemente inválida. Devolve quantas
+// realmente foram entregues — sem isso, quem chama isto (ex: /api/push/test)
+// não tinha como saber que "terminou sem exceção" não é o mesmo que "chegou
+// em algum dispositivo de verdade" (podia não ter nenhuma assinatura, ou
+// todas falharem, e ainda assim reportar sucesso).
+export async function sendPushToUser(
+  pool: Pool,
+  userId: string,
+  payload: PushPayload
+): Promise<{ attempted: number; delivered: number }> {
   const { rows } = await pool.query('SELECT * FROM push_subscriptions WHERE user_id = $1', [userId]);
 
-  await Promise.all(
-    rows.map(async (row) => {
+  const results = await Promise.all(
+    rows.map(async (row): Promise<boolean> => {
       const subscription = {
         endpoint: row.endpoint,
         keys: { p256dh: row.p256dh, auth: row.auth },
       };
       try {
         await webpush.sendNotification(subscription, JSON.stringify(payload));
+        return true;
       } catch (err: any) {
         if (PERMANENTLY_INVALID_STATUS_CODES.includes(err.statusCode)) {
           await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [row.endpoint]).catch(() => {});
         } else {
           console.error('[push] Falha ao enviar notificação:', err.message || err);
         }
+        return false;
       }
     })
   );
+
+  return { attempted: rows.length, delivered: results.filter(Boolean).length };
 }
 
 const parseVencimento = (v: string): Date | null => {

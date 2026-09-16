@@ -16,8 +16,28 @@ export type EnsurePushSubscriptionResult =
   | { ok: true }
   | { ok: false; reason: 'unsupported' | 'no-token' | 'no-vapid' | 'subscribe-failed' | 'server-rejected'; details?: string };
 
-// Garante que o navegador tem uma inscrição de push ativa e registrada no
-// servidor. Idempotente: se já existe assinatura, só reaproveita.
+// Uma PushSubscription fica permanentemente amarrada à applicationServerKey
+// (VAPID pública) usada na hora do subscribe() — não dá pra "atualizar" a
+// chave de uma assinatura existente, só descartar e assinar de novo. Sem
+// essa checagem, girar a chave VAPID no servidor deixa toda assinatura
+// antiga inválida pra sempre: o navegador continua reaproveitando o mesmo
+// objeto de sempre (getSubscription() não sabe nada de chave nova),
+// mandando pro servidor uma assinatura que nunca mais vai validar — o envio
+// falha (400/401/403), a linha morta é limpa, e ninguém percebe porque o
+// front nunca chega a saber que o envio de verdade falhou.
+function sameApplicationServerKey(existing: ArrayBuffer | null | undefined, expected: Uint8Array): boolean {
+  if (!existing) return false;
+  const bytes = new Uint8Array(existing);
+  if (bytes.length !== expected.length) return false;
+  for (let i = 0; i < expected.length; i++) {
+    if (bytes[i] !== expected[i]) return false;
+  }
+  return true;
+}
+
+// Garante que o navegador tem uma inscrição de push ativa (com a chave VAPID
+// atual) e registrada no servidor. Idempotente: se já existe assinatura com
+// a mesma chave, só reaproveita; se a chave mudou, descarta e recria.
 export async function ensurePushSubscription(sessionToken: string | null): Promise<EnsurePushSubscriptionResult> {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     return { ok: false, reason: 'unsupported' };
@@ -31,12 +51,17 @@ export async function ensurePushSubscription(sessionToken: string | null): Promi
     const keyRes = await fetch('/api/push/public-key');
     const { publicKey } = await keyRes.json();
     if (!publicKey) return { ok: false, reason: 'no-vapid' };
+    const expectedKey = urlBase64ToUint8Array(publicKey);
 
     let subscription = await reg.pushManager.getSubscription();
+    if (subscription && !sameApplicationServerKey(subscription.options?.applicationServerKey, expectedKey)) {
+      await subscription.unsubscribe().catch(() => {});
+      subscription = null;
+    }
     if (!subscription) {
       subscription = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
+        applicationServerKey: expectedKey,
       });
     }
 

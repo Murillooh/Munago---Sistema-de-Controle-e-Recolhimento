@@ -752,12 +752,18 @@ export async function createApp() {
   app.post('/api/push/test', requireDb, requireAuth, async (req, res) => {
     try {
       const ownerId = (req as any).authUser.id;
-      await sendPushToUser(pool!, ownerId, {
+      const { attempted, delivered } = await sendPushToUser(pool!, ownerId, {
         title: 'Munago — Alertas ativados',
         body: 'Você vai receber alertas de prazo por aqui, mesmo com o sistema fechado.',
         tag: 'munago-teste-push',
       });
-      res.json({ success: true });
+      if (attempted === 0) {
+        return res.status(409).json({ error: 'Nenhuma inscrição de push encontrada pra esta conta — ative de novo antes de testar.' });
+      }
+      if (delivered === 0) {
+        return res.status(502).json({ error: `Falha ao entregar em ${attempted} dispositivo(s) inscrito(s). Veja o console do servidor para detalhes.` });
+      }
+      res.json({ success: true, attempted, delivered });
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao enviar notificação de teste.', details: err.message });
     }
