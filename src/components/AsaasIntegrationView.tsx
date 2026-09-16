@@ -425,12 +425,16 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
     return folderGroups.find((g) => g.id === selectedFolder)?.items || [];
   }, [items, folderGroups, selectedFolder]);
 
-  const pendingItems = folderItems.filter((i) => i.status === 'Aguardando pagamento');
+  // Aguardando pagamento + Atrasado — as duas ainda precisam de boleto/Pix.
+  // Antes só contava "Aguardando pagamento" aqui; se todos os pendentes de
+  // uma unidade estivessem "Atrasado" (contado nas pastas via isBillableStatus),
+  // o card da pasta mostrava N pendentes mas a lista abaixo vinha vazia.
+  const pendingItems = folderItems.filter((i) => isBillableStatus(i.status));
 
-  // Sem busca, mostra só quem está realmente aguardando pagamento (visão
-  // padrão, sem poluir com franquias já pagas). Com busca, procura em TODOS
-  // os status — sem isso não dava pra achar uma franquia já confirmada ou
-  // atrasada só pra conferir/gerar uma cobrança pra ela.
+  // Sem busca, mostra só quem realmente precisa de cobrança (visão padrão,
+  // sem poluir com franquias já pagas). Com busca, procura em TODOS os
+  // status — sem isso não dava pra achar uma franquia já confirmada só pra
+  // conferir.
   // Busca global: qualquer campo visível no card bate — franquia, CNPJ,
   // C.Custo, status, competência ou vencimento. Antes só achava por
   // franquia/CNPJ; com 300+ lançamentos, procurar por "CANINDÉ" ou

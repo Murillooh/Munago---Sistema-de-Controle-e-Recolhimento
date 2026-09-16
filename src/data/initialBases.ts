@@ -9,8 +9,9 @@ export const INITIAL_UNIDADES: Unidade[] = [
 ];
 
 export const INITIAL_BASE_CATEGORIES: BaseCategory[] = [
-  { id: 'c1', nome: 'Taxa' },
-  { id: 'c2', nome: 'Royalties' },
-  { id: 'c3', nome: 'Fundo de Propaganda' },
-  { id: 'c4', nome: 'Outros' },
+  { id: 'c1', nome: 'Taxa de royalties' },
+  { id: 'c2', nome: 'Taxa de marketing' },
+  { id: 'c3', nome: 'Taxa de gestão de frota' },
+  { id: 'c4', nome: 'Taxa de recolhimento' },
+  { id: 'c5', nome: 'Manutenção' },
 ];
