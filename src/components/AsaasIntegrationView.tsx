@@ -1268,7 +1268,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
 
       {boletoViewer && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl h-[85vh] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-5xl h-[92vh] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
             <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50 shrink-0">
               <div className="min-w-0">
                 <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight truncate">Boleto — {boletoViewer.title}</h3>
