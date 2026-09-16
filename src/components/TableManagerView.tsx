@@ -27,6 +27,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { DynamicTable } from './DynamicTable';
 import { ConfirmDialog } from './ConfirmDialog';
 import { DatePicker } from './DatePicker';
+import { StatusSelect } from './StatusSelect';
 import { exportToExcel, exportToPDF, parseExcelFile } from '../utils/exportImport';
 import { findUnidadeForItem } from '../utils/unidades';
 import { Unidade, BaseCategory } from '../types';
@@ -985,21 +986,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
                     )}
                     {columnVisibility.status && (
                       <td className="py-2 px-4">
-                        <select
-                          value={item.status}
-                          onChange={(e) => onUpdateItem({ ...item, status: e.target.value as any })}
-                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border shadow-xs cursor-pointer appearance-none ${
-                            item.status === 'Recebida' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/50' :
-                            item.status === 'Confirmada' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800/50' :
-                            item.status === 'Atrasado' ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800/50' :
-                            'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800/50'
-                          }`}
-                        >
-                          <option value="Recebida">Recebida</option>
-                          <option value="Confirmada">Confirmada</option>
-                          <option value="Aguardando pagamento">Pendente</option>
-                          <option value="Atrasado">Atrasado</option>
-                        </select>
+                        <StatusSelect value={item.status} onChange={(status) => onUpdateItem({ ...item, status })} />
                       </td>
                     )}
                     {columnVisibility.competenciaRecolhimento && <td className="py-2 px-4 font-black uppercase text-slate-400 dark:text-slate-500 tracking-widest">{item.competenciaRecolhimento}</td>}
