@@ -45,8 +45,15 @@ interface PushPayload {
   url?: string;
 }
 
+// Assinatura permanentemente inválida — nunca vai funcionar de novo, então
+// não faz sentido guardar nem tentar reenviar pra ela depois. 404/410 = o
+// próprio navegador cancelou. 400/401/403 = credencial (VAPID) não bate mais
+// com a que gerou essa assinatura — acontece sempre que a chave VAPID é
+// trocada/rotacionada (assinaturas antigas nunca revalidam sozinhas).
+const PERMANENTLY_INVALID_STATUS_CODES = [400, 401, 403, 404, 410];
+
 // Manda a notificação pra todos os dispositivos inscritos do usuário; remove
-// do banco qualquer assinatura que o navegador já invalidou (410/404).
+// do banco qualquer assinatura permanentemente inválida.
 export async function sendPushToUser(pool: Pool, userId: string, payload: PushPayload) {
   const { rows } = await pool.query('SELECT * FROM push_subscriptions WHERE user_id = $1', [userId]);
 
@@ -59,7 +66,7 @@ export async function sendPushToUser(pool: Pool, userId: string, payload: PushPa
       try {
         await webpush.sendNotification(subscription, JSON.stringify(payload));
       } catch (err: any) {
-        if (err.statusCode === 404 || err.statusCode === 410) {
+        if (PERMANENTLY_INVALID_STATUS_CODES.includes(err.statusCode)) {
           await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [row.endpoint]).catch(() => {});
         } else {
           console.error('[push] Falha ao enviar notificação:', err.message || err);
