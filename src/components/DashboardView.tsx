@@ -1,5 +1,5 @@
 import React from 'react';
-import { RecolhimentoItem, GoalSettings, CONFIRMADO_RECEBIDO_FILTER } from '../types';
+import { RecolhimentoItem, GoalSettings, EstoqueItem, CONFIRMADO_RECEBIDO_FILTER } from '../types';
 import {
   TrendingUp,
   CheckCircle2,
@@ -9,6 +9,7 @@ import {
   FileSpreadsheet,
   Target,
   ArrowUpRight,
+  Boxes,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -22,6 +23,7 @@ import {
 
 interface DashboardViewProps {
   items: RecolhimentoItem[];
+  estoqueItems: EstoqueItem[];
   goalSettings: GoalSettings;
   onNavigateTable: (status?: string) => void;
   onNavigateMetas: () => void;
@@ -30,6 +32,7 @@ interface DashboardViewProps {
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   items,
+  estoqueItems,
   goalSettings,
   onNavigateTable,
   onNavigateMetas,
@@ -55,7 +58,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // Use filteredItems for calculations and rendering...
   const totalValue = filteredItems.reduce((sum, item) => sum + (item.valor || 0), 0);
-  
+
+  // Mesmo cálculo da tela de Estoque (custo x qtd. física) — soma o valor dos
+  // dois módulos num único "saldo geral", já que hoje cada um só mostra o
+  // próprio total isolado.
+  const valorEstoque = estoqueItems.reduce((sum, i) => sum + i.custo * i.qtdFisico, 0);
+  const saldoTotalGeral = totalValue + valorEstoque;
+
   const confirmedValue = filteredItems
     .filter((i) => i.status === 'Confirmada' || i.status === 'Recebida')
     .reduce((sum, i) => sum + (i.valor || 0), 0);
@@ -120,6 +129,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span>Gerenciar Planilha</span>
             <ArrowUpRight className="w-3.5 h-3.5" />
           </button>
+        </div>
+      </div>
+
+      {/* Saldo Geral — soma Planilha (todos os status) + Estoque (custo x qtd. física),
+          cada módulo hoje só mostra o próprio total isolado na tela dele. */}
+      <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200/80 dark:border-slate-800/60 shadow-sm">
+        <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Saldo Geral (Planilha + Estoque)</p>
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+          <h3 className="text-2xl font-black text-slate-900 dark:text-slate-100">
+            R$ {saldoTotalGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </h3>
+          <div className="flex items-center gap-4 pb-0.5">
+            <span className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 dark:text-blue-400">
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              Planilha: R$ {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </span>
+            <span className="flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+              <Boxes className="w-3.5 h-3.5" />
+              Estoque: R$ {valorEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </span>
+          </div>
         </div>
       </div>
 

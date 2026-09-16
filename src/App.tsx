@@ -839,6 +839,7 @@ export default function App() {
             {activeTab === 'dashboard' && (
               <DashboardView
                 items={items}
+                estoqueItems={estoqueItems}
                 goalSettings={goalSettings}
                 onNavigateTable={(status) => {
                   setPendingStatusFilter(status ?? null);
