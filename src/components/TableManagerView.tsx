@@ -558,8 +558,55 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
     }
   };
 
+  const fmtMoney = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+  const kpiPendentes = filteredItems.filter((i) => i.status === 'Aguardando pagamento');
+  const kpiAtrasados = filteredItems.filter((i) => i.status === 'Atrasado');
+  const kpiConfirmados = filteredItems.filter((i) => i.status === 'Confirmada' || i.status === 'Recebida');
+  const kpiValorTotal = filteredItems.reduce((s, i) => s + i.valor, 0);
+
   return (
     <div className="space-y-4 pb-8">
+      {/* KPIs — reflete os filtros ativos (busca/status/competência/C.Custo/data),
+          igual o "Total Filtro" já escondido no rodapé da tabela, só que visível
+          de cara no topo, no mesmo padrão da tela de Estoque. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">Valor Total</p>
+          <h3 className="text-xl font-black text-slate-900 dark:text-slate-100">{fmtMoney(kpiValorTotal)}</h3>
+          <div className="mt-2 flex items-center text-[9px] font-bold text-slate-500">
+            <FileSpreadsheet className="w-3 h-3 mr-1" />
+            {filteredItems.length} REGISTRO{filteredItems.length !== 1 ? 'S' : ''}
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-0.5">Aguardando Pagamento</p>
+          <h3 className="text-xl font-black text-amber-600 dark:text-amber-400">{fmtMoney(kpiPendentes.reduce((s, i) => s + i.valor, 0))}</h3>
+          <div className="mt-2 flex items-center text-[9px] font-bold text-amber-600/70">
+            <Clock className="w-3 h-3 mr-1" />
+            {kpiPendentes.length} FRANQUIA{kpiPendentes.length !== 1 ? 'S' : ''}
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <p className="text-[9px] font-black text-rose-500 uppercase tracking-widest mb-0.5">Atrasados</p>
+          <h3 className="text-xl font-black text-rose-600 dark:text-rose-400">{fmtMoney(kpiAtrasados.reduce((s, i) => s + i.valor, 0))}</h3>
+          <div className="mt-2 flex items-center text-[9px] font-bold text-rose-600/70">
+            <AlertCircle className="w-3 h-3 mr-1" />
+            {kpiAtrasados.length} FRANQUIA{kpiAtrasados.length !== 1 ? 'S' : ''}
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-0.5">Confirmados</p>
+          <h3 className="text-xl font-black text-emerald-600 dark:text-emerald-400">{fmtMoney(kpiConfirmados.reduce((s, i) => s + i.valor, 0))}</h3>
+          <div className="mt-2 flex items-center text-[9px] font-bold text-emerald-600/70">
+            <CheckCircle2 className="w-3 h-3 mr-1" />
+            {kpiConfirmados.length} FRANQUIA{kpiConfirmados.length !== 1 ? 'S' : ''}
+          </div>
+        </div>
+      </div>
+
       {/* Top Header & Actions - Compact */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div>
