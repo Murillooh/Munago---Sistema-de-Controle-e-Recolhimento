@@ -29,7 +29,6 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { DatePicker } from './DatePicker';
 import { StatusSelect } from './StatusSelect';
 import { exportToExcel, exportToPDF, parseExcelFile } from '../utils/exportImport';
-import { findUnidadeForItem } from '../utils/unidades';
 import { Unidade, BaseCategory } from '../types';
 import {
   DndContext,
@@ -209,10 +208,6 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
     );
   };
 
-  // Cada unidade tem sua própria chave ASAAS (Bases > Unidades); resolve por
-  // CNPJ, com fallback por nome da unidade x C. Custo (ver utils/unidades.ts).
-  const findUnidadeApiKey = (item: RecolhimentoItem) => findUnidadeForItem(unidades, item)?.asaasApiKey;
-
   const handleSyncAsaas = async () => {
     const pendingWithAsaas = items.filter(i => i.status === 'Aguardando pagamento' && i.asaasId);
 
@@ -227,8 +222,8 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
 
     try {
       for (const item of pendingWithAsaas) {
-        const apiKey = findUnidadeApiKey(item);
-        if (!apiKey) {
+        const unidade = unidades.find(u => u.nome.trim().toLowerCase() === item.franquia.trim().toLowerCase());
+        if (!unidade || !unidade.hasAsaasKey) {
           skippedNoKey++;
           continue;
         }
@@ -237,7 +232,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              apiKey,
+              unidadeId: unidade.id,
               sandbox: false, // sempre produção — sem alternância (pedido do usuário)
               paymentId: item.asaasId
             })

@@ -124,7 +124,7 @@ export function rowToUnidade(row: UnidadeRow) {
     nome: row.nome,
     cnpj: row.cnpj,
     cCustoPadrao: row.c_custo_padrao || undefined,
-    asaasApiKey: row.asaas_api_key || undefined,
+    hasAsaasKey: Boolean(row.asaas_api_key),
   };
 }
 

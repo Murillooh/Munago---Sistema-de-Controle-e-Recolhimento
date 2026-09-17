@@ -55,7 +55,7 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
 
   const handleOpenEdit = (item: any) => {
     setEditingItem(item);
-    setFormData({ ...item });
+    setFormData({ ...item, asaasApiKey: '' });
     setIsModalOpen(true);
   };
 
@@ -211,7 +211,7 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                     )}
                     {activeSubTab === 'unidades' && (
                       <td className="py-4 px-6">
-                        {(item as any).asaasApiKey ? (
+                        {(item as any).hasAsaasKey ? (
                           <span className="inline-flex items-center space-x-1 text-emerald-600 dark:text-emerald-400 font-bold text-[10px] uppercase tracking-wider">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                             <span>Configurada</span>
@@ -335,7 +335,7 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                         value={formData.asaasApiKey || ''}
                         onChange={(e) => setFormData({ ...formData, asaasApiKey: e.target.value })}
                         className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-mono focus:ring-2 focus:ring-blue-500/20 outline-none"
-                        placeholder="$aact_YTU5Y... (Access Token desta unidade)"
+                        placeholder={editingItem && editingItem.hasAsaasKey ? "*** Configurada (digite para alterar) ***" : "$aact_YTU5Y... (Access Token desta unidade)"}
                       />
                       <p className="text-[10px] text-slate-400 mt-1">Usada para gerar cobranças ASAAS desta unidade. Fica só aqui, não aparece na tela de Integração.</p>
                     </div>

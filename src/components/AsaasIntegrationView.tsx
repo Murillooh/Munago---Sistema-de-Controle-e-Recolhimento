@@ -175,9 +175,8 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
 
   const openBoletoViewer = async (item: RecolhimentoItem) => {
     const unidade = findUnidade(item);
-    const apiKey = unidade?.asaasApiKey;
     const fallback = item.asaasInvoiceUrl;
-    if (!apiKey || !item.asaasId) {
+    if (!unidade?.hasAsaasKey || !item.asaasId) {
       if (fallback) window.open(fallback, '_blank', 'noreferrer');
       return;
     }
@@ -186,7 +185,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
       const res = await fetch('/api/asaas/get-payment-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey, sandbox, paymentId: item.asaasId }),
+        body: JSON.stringify({ unidadeId: unidade.id, sandbox, paymentId: item.asaasId }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -217,8 +216,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
     extra?: Partial<AsaasCustomerInfo> & { billingType?: AsaasBillingType; externalReference?: string; fine?: { value: number }; interest?: { value: number }; discount?: { value: number; dueDateLimitDays: number } }
   ): Promise<{ ok: true; invoiceUrl?: string } | { ok: false; error: string }> => {
     const unidade = findUnidade(item);
-    const apiKey = unidade?.asaasApiKey;
-    if (!apiKey) {
+    if (!unidade?.hasAsaasKey) {
       return { ok: false, error: `${item.franquia}: sem chave ASAAS configurada (Bases > Unidades).` };
     }
 
@@ -228,7 +226,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          apiKey,
+          unidadeId: unidade.id,
           sandbox,
           billingType: extra?.billingType || billingType,
           chargeData: { ...item, ...extra },
@@ -306,7 +304,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
     }));
     setAdHocResult(null);
 
-    if (!u?.asaasApiKey || !u.cnpj) {
+    if (!u?.hasAsaasKey || !u.cnpj) {
       setCustomerLookup({ status: 'idle' });
       return;
     }
@@ -315,7 +313,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
       const res = await fetch('/api/asaas/customer-lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: u.asaasApiKey, sandbox, cnpj: u.cnpj }),
+        body: JSON.stringify({ unidadeId: u.id, sandbox, cnpj: u.cnpj }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -465,7 +463,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   // Só entra na seleção/lote quem realmente pode ser gerado agora — item já
   // emitido, sem chave de unidade, ou já pago não tem o que fazer num "gerar em lote".
   const billableItems = filteredPendingItems.filter(
-    (i) => !i.asaasId && Boolean(findUnidade(i)?.asaasApiKey) && isBillableStatus(i.status)
+    (i) => !i.asaasId && Boolean(findUnidade(i)?.hasAsaasKey) && isBillableStatus(i.status)
   );
   const allBillableSelected = billableItems.length > 0 && billableItems.every((i) => selectedIds.has(i.id));
 
@@ -712,7 +710,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
               const generated = generatedCharges[item.id];
               const invoiceUrl = generated?.invoiceUrl || item.asaasInvoiceUrl;
               const unidade = findUnidade(item);
-              const hasKey = Boolean(unidade?.asaasApiKey);
+              const hasKey = Boolean(unidade?.hasAsaasKey);
               const alreadyPaid = !alreadyEmitted && !isBillableStatus(item.status);
               const canSelect = !alreadyEmitted && hasKey && isBillableStatus(item.status);
               return (
@@ -920,7 +918,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                   {adHocUnidade && (
                     <p className="text-[10px] text-slate-400 mt-1 font-mono">{adHocUnidade.cnpj || 'sem CNPJ cadastrado'}</p>
                   )}
-                  {adHocUnidade && !adHocUnidade.asaasApiKey && (
+                  {adHocUnidade && !adHocUnidade.hasAsaasKey && (
                     <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-1">Sem chave ASAAS configurada para esta unidade (Bases &gt; Unidades).</p>
                   )}
 
@@ -1065,7 +1063,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                   </button>
                   <button
                     type="button"
-                    disabled={!adHocUnidade || !adHocUnidade.asaasApiKey || customerLookup.status === 'loading'}
+                    disabled={!adHocUnidade || !adHocUnidade.hasAsaasKey || customerLookup.status === 'loading'}
                     onClick={() => setAdHocStep('cobranca')}
                     className="flex-1 px-4 py-2.5 bg-emerald-600 text-white font-black rounded-xl text-xs hover:bg-emerald-700 disabled:opacity-50 transition-all shadow-lg shadow-emerald-600/20 uppercase tracking-widest flex items-center justify-center space-x-2"
                   >

@@ -601,7 +601,7 @@ export default function App() {
     let cancelled = false;
 
     const importNewAsaasCharges = async () => {
-      const unidadesComChave = unidades.filter((u: any) => u.asaasApiKey);
+      const unidadesComChave = unidades.filter((u: any) => u.hasAsaasKey);
       if (unidadesComChave.length === 0) return;
 
       // Acumula tudo e manda num POST em lote só no final, em vez de um
@@ -620,7 +620,7 @@ export default function App() {
           const res = await fetch('/api/asaas/list-payments', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ apiKey: unidade.asaasApiKey, sandbox: false }),
+            body: JSON.stringify({ unidadeId: unidade.id, sandbox: false }),
           });
           if (!res.ok) continue;
           const data = await res.json();

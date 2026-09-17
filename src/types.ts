@@ -94,7 +94,7 @@ export interface Unidade {
   nome: string;
   cnpj: string;
   cCustoPadrao?: string;
-  asaasApiKey?: string;
+  hasAsaasKey?: boolean;
 }
 
 export interface BaseCategory {

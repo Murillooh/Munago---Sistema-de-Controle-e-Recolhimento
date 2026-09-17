@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import rateLimit from 'express-rate-limit';
 import { GoogleGenAI } from '@google/genai';
 import { pool, initDb, rowToItem, rowToUser, rowToEstoqueItem, rowToUnidade } from './db.js';
 import { configureWebPush, getVapidPublicKey, sendPushToUser, runDeadlineAlertCheck } from './push.js';
@@ -39,6 +40,12 @@ export async function createApp() {
   // isso acontecer. Sem DATABASE_URL, esses endpoints ficam fora do ar e o
   // login antigo (client-only, sem senha real) continua sendo o fallback.
   // ---------------------------------------------------------------------
+  const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 15,
+    message: { error: 'Muitas tentativas de login. Tente novamente mais tarde.' }
+  });
+
   const getSessionUser = async (req: express.Request) => {
     const authHeader = req.headers.authorization || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -105,7 +112,7 @@ export async function createApp() {
     }
   });
 
-  app.post('/api/auth/login', requireDb, async (req, res) => {
+  app.post('/api/auth/login', requireDb, loginLimiter, async (req, res) => {
     try {
       const { email, password } = req.body || {};
       if (!email || !password) return res.status(400).json({ error: 'Informe e-mail e senha.' });
@@ -636,7 +643,7 @@ export async function createApp() {
   app.put('/api/unidades/:id', requireDb, requireAdmin, async (req, res) => {
     try {
       const result = await pool!.query(
-        `UPDATE unidades SET nome = $2, cnpj = $3, c_custo_padrao = $4, asaas_api_key = $5
+        `UPDATE unidades SET nome = $2, cnpj = $3, c_custo_padrao = $4, asaas_api_key = COALESCE($5, asaas_api_key)
          WHERE id = $1
          RETURNING *`,
         unidadeToParams({ ...req.body, id: req.params.id })
@@ -671,7 +678,10 @@ export async function createApp() {
 
   app.post('/api/asaas/webhook', async (req, res) => {
     const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN;
-    if (expectedToken && req.headers['asaas-access-token'] !== expectedToken) {
+    if (!expectedToken) {
+      return res.status(500).json({ error: 'Webhook token not configured in production' });
+    }
+    if (req.headers['asaas-access-token'] !== expectedToken) {
       return res.status(401).json({ error: 'Token de webhook inválido.' });
     }
 
@@ -1061,11 +1071,23 @@ export async function createApp() {
   });
 
   // ASAAS Bank API Proxy Endpoints
+  
+  async function getAsaasToken(req: express.Request): Promise<string | null> {
+    const { apiKey, unidadeId } = req.body || {};
+    if (apiKey) return apiKey;
+    if (unidadeId && pool) {
+      const result = await pool.query('SELECT asaas_api_key FROM unidades WHERE id = $1', [unidadeId]);
+      return result.rows[0]?.asaas_api_key || null;
+    }
+    return process.env.ASAAS_API_KEY || null;
+  }
+
   // Test ASAAS Connection / API Key validity
   app.post('/api/asaas/test-connection', async (req, res) => {
-    const { apiKey, sandbox } = req.body;
-    if (!apiKey) {
-      return res.status(400).json({ error: 'Chave de API ASAAS não fornecida.' });
+    const { sandbox } = req.body;
+    const token = await getAsaasToken(req);
+    if (!token) {
+      return res.status(400).json({ error: 'Chave de API ASAAS não configurada.' });
     }
 
     const baseUrl = sandbox
@@ -1077,7 +1099,7 @@ export async function createApp() {
       const response = await fetch(`${baseUrl}/finance/balance`, {
         method: 'GET',
         headers: {
-          'access_token': apiKey,
+          'access_token': token,
           'Content-Type': 'application/json',
         },
       });
@@ -1126,15 +1148,16 @@ export async function createApp() {
   // sem isso o boleto sai só com nome+CNPJ e pode faltar dado que o ASAAS
   // pede na hora de emitir de verdade.
   app.post('/api/asaas/customer-lookup', async (req, res) => {
-    const { apiKey, sandbox, cnpj } = req.body || {};
-    if (!apiKey) return res.status(400).json({ error: 'Chave API ASAAS obrigatória.' });
+    const { sandbox, cnpj } = req.body || {};
+    const token = await getAsaasToken(req);
+    if (!token) return res.status(400).json({ error: 'Chave API ASAAS obrigatória.' });
     const cpfCnpj = String(cnpj || '').replace(/\D/g, '');
     if (!cpfCnpj) return res.status(400).json({ error: 'CNPJ obrigatório.' });
 
     const baseUrl = sandbox ? 'https://sandbox.asaas.com/v3' : 'https://api.asaas.com/v3';
     try {
       const response = await fetch(`${baseUrl}/customers?cpfCnpj=${cpfCnpj}`, {
-        headers: { 'access_token': apiKey, 'Content-Type': 'application/json' },
+        headers: { 'access_token': token, 'Content-Type': 'application/json' },
       });
       if (!response.ok) {
         const error = await readAsaasError(response, 'Falha ao consultar cliente no ASAAS.');
@@ -1165,12 +1188,11 @@ export async function createApp() {
 
   // Create ASAAS Charge (Cobrança) for Recolhimento
   app.post('/api/asaas/create-charge', async (req, res) => {
-    const { apiKey, sandbox, chargeData, billingType } = req.body;
-    if (!apiKey && !process.env.ASAAS_API_KEY) {
+    const { sandbox, chargeData, billingType } = req.body;
+    const token = await getAsaasToken(req);
+    if (!token) {
       return res.status(400).json({ error: 'Chave API ASAAS obrigatória.' });
     }
-
-    const token = apiKey || process.env.ASAAS_API_KEY;
     const baseUrl = sandbox
       ? 'https://sandbox.asaas.com/v3'
       : 'https://api.asaas.com/v3';
@@ -1316,8 +1338,9 @@ export async function createApp() {
 
   // Get ASAAS Payment Status
   app.post('/api/asaas/get-payment-status', async (req, res) => {
-    const { apiKey, sandbox, paymentId } = req.body;
-    if (!apiKey) return res.status(400).json({ error: 'Chave API ASAAS obrigatória.' });
+    const { sandbox, paymentId } = req.body;
+    const token = await getAsaasToken(req);
+    if (!token) return res.status(400).json({ error: 'Chave API ASAAS obrigatória.' });
 
     const baseUrl = sandbox ? 'https://sandbox.asaas.com/v3' : 'https://api.asaas.com/v3';
 
@@ -1325,7 +1348,7 @@ export async function createApp() {
       const response = await fetch(`${baseUrl}/payments/${paymentId}`, {
         method: 'GET',
         headers: {
-          'access_token': apiKey,
+          'access_token': token,
           'Content-Type': 'application/json',
         },
       });
@@ -1360,23 +1383,34 @@ export async function createApp() {
   // o que já existe (por asaasId) e o que é novo; aqui só devolve a lista
   // crua, já com status traduzido pro padrão do Munago.
   app.post('/api/asaas/list-payments', async (req, res) => {
-    const { apiKey, sandbox } = req.body || {};
-    if (!apiKey) return res.status(400).json({ error: 'Chave API ASAAS obrigatória.' });
+    const { sandbox } = req.body || {};
+    const token = await getAsaasToken(req);
+    if (!token) return res.status(400).json({ error: 'Chave API ASAAS obrigatória.' });
 
     const baseUrl = sandbox ? 'https://sandbox.asaas.com/v3' : 'https://api.asaas.com/v3';
     try {
-      // limit=100 é o máximo por página da API do ASAAS. Sem paginação por
-      // enquanto — suficiente pra pegar cobranças recém-lançadas; histórico
-      // muito antigo pode não entrar na primeira leva.
-      const response = await fetch(`${baseUrl}/payments?limit=100`, {
-        headers: { 'access_token': apiKey, 'Content-Type': 'application/json' },
-      });
-      if (!response.ok) {
-        const error = await readAsaasError(response, 'Falha ao listar cobranças no ASAAS.');
-        return res.status(response.status).json({ error });
+      // limit=100 é o máximo por página da API do ASAAS. Pagina com `offset`
+      // até `hasMore` vir false, senão só a leva mais recente entrava — todo
+      // histórico anterior a isso nunca era importado pro Munago.
+      const payments: any[] = [];
+      let offset = 0;
+      const PAGE_LIMIT = 100;
+      const MAX_PAGES = 50; // trava de segurança: até 5000 cobranças por unidade
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const response = await fetch(`${baseUrl}/payments?limit=${PAGE_LIMIT}&offset=${offset}`, {
+          headers: { 'access_token': token, 'Content-Type': 'application/json' },
+        });
+        if (!response.ok) {
+          const error = await readAsaasError(response, 'Falha ao listar cobranças no ASAAS.');
+          return res.status(response.status).json({ error });
+        }
+        const data = await response.json();
+        const pageItems = Array.isArray(data.data) ? data.data : [];
+        payments.push(...pageItems);
+        if (!data.hasMore || pageItems.length === 0) break;
+        offset += PAGE_LIMIT;
       }
-      const data = await response.json();
-      const payments = (Array.isArray(data.data) ? data.data : []).map((p: any) => ({
+      const mapped = payments.map((p: any) => ({
         id: p.id,
         value: p.value,
         dueDate: p.dueDate,
@@ -1385,7 +1419,7 @@ export async function createApp() {
         invoiceUrl: p.invoiceUrl || p.bankSlipUrl,
         paymentDate: p.paymentDate,
       }));
-      res.json({ success: true, payments });
+      res.json({ success: true, payments: mapped });
     } catch (err: any) {
       res.status(502).json({ error: 'Falha ao comunicar com a API do ASAAS: ' + err.message });
     }
