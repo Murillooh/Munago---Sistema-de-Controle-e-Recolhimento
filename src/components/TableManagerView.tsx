@@ -230,7 +230,10 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
         try {
           const res = await fetch('/api/asaas/get-payment-status', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+            },
             body: JSON.stringify({
               unidadeId: unidade.id,
               sandbox: false, // sempre produção — sem alternância (pedido do usuário)

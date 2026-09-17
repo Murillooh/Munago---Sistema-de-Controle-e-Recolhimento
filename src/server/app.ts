@@ -911,7 +911,7 @@ export async function createApp() {
   });
 
   // AI Insights Endpoint
-  app.post('/api/ai/insights', async (req, res) => {
+  app.post('/api/ai/insights', requireAuth, async (req, res) => {
     if (!genAI) {
       return res.json({
         insights: "A IA está em modo offline. Configure sua chave API para insights em tempo real.",
@@ -971,7 +971,7 @@ export async function createApp() {
   });
 
   // Chat Assistant Endpoint
-  app.post('/api/chat', async (req, res) => {
+  app.post('/api/chat', requireAuth, async (req, res) => {
     if (!genAI) {
       return res.status(503).json({ error: 'IA Indisponível' });
     }
@@ -1035,7 +1035,7 @@ export async function createApp() {
   // depender de regex fixo no cliente, que nunca cobre toda frase possível.
   // Prompt é minúsculo (só a mensagem do usuário, não a base toda), então
   // fica rápido mesmo com a planilha grande carregada.
-  app.post('/api/chat/pdf-intent', async (req, res) => {
+  app.post('/api/chat/pdf-intent', requireAuth, async (req, res) => {
     const fallback = { status: null, limit: null, order: null, fraction: null };
     if (!genAI) return res.json(fallback);
 
@@ -1083,7 +1083,7 @@ export async function createApp() {
   }
 
   // Test ASAAS Connection / API Key validity
-  app.post('/api/asaas/test-connection', async (req, res) => {
+  app.post('/api/asaas/test-connection', requireAuth, async (req, res) => {
     const { sandbox } = req.body;
     const token = await getAsaasToken(req);
     if (!token) {
@@ -1147,7 +1147,7 @@ export async function createApp() {
   // Cobrança Avulsa com o que já existe lá (e-mail, telefone, endereço) —
   // sem isso o boleto sai só com nome+CNPJ e pode faltar dado que o ASAAS
   // pede na hora de emitir de verdade.
-  app.post('/api/asaas/customer-lookup', async (req, res) => {
+  app.post('/api/asaas/customer-lookup', requireAuth, async (req, res) => {
     const { sandbox, cnpj } = req.body || {};
     const token = await getAsaasToken(req);
     if (!token) return res.status(400).json({ error: 'Chave API ASAAS obrigatória.' });
@@ -1187,7 +1187,7 @@ export async function createApp() {
   });
 
   // Create ASAAS Charge (Cobrança) for Recolhimento
-  app.post('/api/asaas/create-charge', async (req, res) => {
+  app.post('/api/asaas/create-charge', requireAuth, async (req, res) => {
     const { sandbox, chargeData, billingType } = req.body;
     const token = await getAsaasToken(req);
     if (!token) {
@@ -1311,6 +1311,19 @@ export async function createApp() {
   // nosso próprio domínio, o iframe passa a carregar same-origin — o
   // X-Frame-Options do ASAAS nunca chega até o navegador do usuário.
   app.get('/api/asaas/boleto-pdf', async (req, res) => {
+    // Rota carregada direto num <iframe src>, então não dá pra mandar
+    // header Authorization (navegação simples de GET não aceita header
+    // customizado) — token de sessão vem por query string aqui, e só
+    // aqui, pra rota continuar exigindo login sem quebrar o iframe.
+    if (!pool) return res.status(503).json({ error: 'Banco de dados não configurado (defina DATABASE_URL).' });
+    const sessionCheck = await pool.query(
+      `SELECT u.id FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = $1 AND u.status = 'approved'`,
+      [String(req.query.token || '')]
+    );
+    if (!sessionCheck.rows[0]) {
+      return res.status(401).json({ error: 'Sessão inválida ou expirada. Faça login novamente.' });
+    }
+
     const rawUrl = String(req.query.url || '');
     let target: URL;
     try {
@@ -1337,7 +1350,7 @@ export async function createApp() {
   });
 
   // Get ASAAS Payment Status
-  app.post('/api/asaas/get-payment-status', async (req, res) => {
+  app.post('/api/asaas/get-payment-status', requireAuth, async (req, res) => {
     const { sandbox, paymentId } = req.body;
     const token = await getAsaasToken(req);
     if (!token) return res.status(400).json({ error: 'Chave API ASAAS obrigatória.' });
@@ -1382,7 +1395,7 @@ export async function createApp() {
   // ter passado pelo botão "Gerar no ASAAS" daqui. O cliente (App.tsx) decide
   // o que já existe (por asaasId) e o que é novo; aqui só devolve a lista
   // crua, já com status traduzido pro padrão do Munago.
-  app.post('/api/asaas/list-payments', async (req, res) => {
+  app.post('/api/asaas/list-payments', requireAuth, async (req, res) => {
     const { sandbox } = req.body || {};
     const token = await getAsaasToken(req);
     if (!token) return res.status(400).json({ error: 'Chave API ASAAS obrigatória.' });

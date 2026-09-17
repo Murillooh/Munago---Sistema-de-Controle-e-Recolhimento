@@ -619,7 +619,7 @@ export default function App() {
         try {
           const res = await fetch('/api/asaas/list-payments', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: itemsAuthHeaders(),
             body: JSON.stringify({ unidadeId: unidade.id, sandbox: false }),
           });
           if (!res.ok) continue;
@@ -995,7 +995,7 @@ export default function App() {
               <NotificationsView items={items} goalSettings={goalSettings} searchTerm={searchTerm} sessionToken={sessionToken} />
             )}
             {activeTab === 'asaas' && canAccessTab(currentUser, 'asaas') && (
-              <AsaasIntegrationView items={items} unidades={unidades} onUpdateItem={handleUpdateItem} onAddItem={handleAddItem} />
+              <AsaasIntegrationView items={items} unidades={unidades} sessionToken={sessionToken} onUpdateItem={handleUpdateItem} onAddItem={handleAddItem} />
             )}
             {activeTab === 'usuarios' && currentUser?.role === 'admin' && (
               <AdminUsersView sessionToken={sessionToken} currentUserId={currentUser.id} />

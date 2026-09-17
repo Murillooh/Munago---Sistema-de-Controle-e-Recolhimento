@@ -44,6 +44,7 @@ interface AsaasCustomerInfo {
 interface AsaasIntegrationViewProps {
   items: RecolhimentoItem[];
   unidades: Unidade[];
+  sessionToken: string | null;
   onUpdateItem: (item: RecolhimentoItem) => void;
   onAddItem: (item: RecolhimentoItem) => void;
 }
@@ -105,11 +106,19 @@ const EMPTY_AD_HOC_FORM = {
   descontoDias: '3',
 };
 
-export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ items, unidades, onUpdateItem, onAddItem }) => {
+export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ items, unidades, sessionToken, onUpdateItem, onAddItem }) => {
   // Antes existia toggle Sandbox/Produção — pedido explícito do usuário pra
   // sempre ser real, sem alternância nenhuma (evita esquecer trocado e uma
   // cobrança de verdade cair como teste, ou vice-versa).
   const sandbox = false;
+
+  // Rotas /api/asaas/* exigem sessão (requireAuth) — sem login, qualquer um
+  // na internet podia gerar cobrança de verdade ou ler dado financeiro só
+  // adivinhando um unidadeId.
+  const asaasAuthHeaders = (): Record<string, string> => ({
+    'Content-Type': 'application/json',
+    ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+  });
 
   // Antes o servidor gerava sempre PIX, sem opção nenhuma — nunca existia
   // boleto de verdade mesmo a tela falando "Pix/Boleto". "Pix + Boleto"
@@ -184,7 +193,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
     try {
       const res = await fetch('/api/asaas/get-payment-status', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: asaasAuthHeaders(),
         body: JSON.stringify({ unidadeId: unidade.id, sandbox, paymentId: item.asaasId }),
       });
       const data = await res.json();
@@ -197,7 +206,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
         setBoletoViewer({
           title: item.franquia,
           loading: false,
-          url: `/api/asaas/boleto-pdf?url=${encodeURIComponent(data.bankSlipUrl)}`,
+          url: `/api/asaas/boleto-pdf?url=${encodeURIComponent(data.bankSlipUrl)}&token=${encodeURIComponent(sessionToken || '')}`,
           fallbackUrl: invoiceUrl,
         });
       } else {
@@ -224,7 +233,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
     try {
       const res = await fetch('/api/asaas/create-charge', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: asaasAuthHeaders(),
         body: JSON.stringify({
           unidadeId: unidade.id,
           sandbox,
@@ -312,7 +321,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
     try {
       const res = await fetch('/api/asaas/customer-lookup', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: asaasAuthHeaders(),
         body: JSON.stringify({ unidadeId: u.id, sandbox, cnpj: u.cnpj }),
       });
       const data = await res.json();

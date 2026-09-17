@@ -250,7 +250,10 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, estoqueItem
         try {
           const intentRes = await fetch('/api/chat/pdf-intent', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+            },
             body: JSON.stringify({ text: prompt }),
           });
           if (intentRes.ok) intent = { ...intent, ...(await intentRes.json()) };
@@ -305,7 +308,10 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, estoqueItem
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+        },
         body: JSON.stringify({
           prompt,
           history: messages,
