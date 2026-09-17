@@ -46,13 +46,20 @@ export async function createApp() {
     message: { error: 'Muitas tentativas de login. Tente novamente mais tarde.' }
   });
 
+  // Sessão nunca expirava antes disso — um token vazado ou esquecido num
+  // dispositivo continuava válido pra sempre, só morria com logout manual.
+  // 30 dias cobre bem o uso normal ("continuar logado") sem deixar token
+  // velho eternamente ativo.
+  const SESSION_TTL_DAYS = 30;
+
   const getSessionUser = async (req: express.Request) => {
     const authHeader = req.headers.authorization || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
     if (!token || !pool) return null;
     const result = await pool.query(
-      `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = $1`,
-      [token]
+      `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
+       WHERE s.token = $1 AND s.created_at > now() - ($2 * interval '1 day')`,
+      [token, SESSION_TTL_DAYS]
     );
     return result.rows[0] || null;
   };
@@ -133,6 +140,9 @@ export async function createApp() {
 
       const token = crypto.randomBytes(32).toString('hex');
       await pool!.query('INSERT INTO sessions (token, user_id) VALUES ($1, $2)', [token, userRow.id]);
+      // Aproveita o login pra limpar sessão expirada (TTL em getSessionUser)
+      // e não deixar a tabela crescer pra sempre — não bloqueia a resposta.
+      pool!.query(`DELETE FROM sessions WHERE created_at <= now() - ($1 * interval '1 day')`, [SESSION_TTL_DAYS]).catch(() => {});
 
       res.json({ success: true, token, user: rowToUser(userRow) });
     } catch (err: any) {
@@ -1317,8 +1327,9 @@ export async function createApp() {
     // aqui, pra rota continuar exigindo login sem quebrar o iframe.
     if (!pool) return res.status(503).json({ error: 'Banco de dados não configurado (defina DATABASE_URL).' });
     const sessionCheck = await pool.query(
-      `SELECT u.id FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = $1 AND u.status = 'approved'`,
-      [String(req.query.token || '')]
+      `SELECT u.id FROM sessions s JOIN users u ON u.id = s.user_id
+       WHERE s.token = $1 AND u.status = 'approved' AND s.created_at > now() - ($2 * interval '1 day')`,
+      [String(req.query.token || ''), SESSION_TTL_DAYS]
     );
     if (!sessionCheck.rows[0]) {
       return res.status(401).json({ error: 'Sessão inválida ou expirada. Faça login novamente.' });
