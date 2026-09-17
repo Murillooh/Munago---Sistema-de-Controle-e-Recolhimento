@@ -55,26 +55,31 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ items, sessionToken })
       // Search term
       if (searchTerm && !item.franquia.toLowerCase().includes(searchTerm.toLowerCase()) && !item.cnpj.includes(searchTerm)) return false;
 
-      // Date range (based on vencimento)
+      // Date range — casa pelo vencimento OU pela data de pagamento, senão
+      // um item pago em setembro com vencimento em agosto (ou vice-versa)
+      // nunca aparecia no relatório de um período que ele claramente faz parte.
       if (startDate || endDate) {
         // Convert DD/MM/AAAA to YYYY-MM-DD for comparison
         const parseDate = (d: string) => {
-          const parts = d.split('/');
+          const parts = (d || '').split('/');
           if (parts.length !== 3) return null;
           return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
         };
 
-        const itemDate = parseDate(item.vencimento);
-        if (itemDate) {
-          if (startDate) {
-            const start = new Date(startDate).getTime();
-            if (itemDate < start) return false;
-          }
-          if (endDate) {
-            const end = new Date(endDate).getTime();
-            if (itemDate > end) return false;
-          }
-        }
+        const start = startDate ? new Date(startDate).getTime() : null;
+        const end = endDate ? new Date(endDate).getTime() : null;
+
+        const inRange = (time: number | null) => {
+          if (time === null) return false;
+          if (start !== null && time < start) return false;
+          if (end !== null && time > end) return false;
+          return true;
+        };
+
+        const vencimentoTime = parseDate(item.vencimento);
+        const pagamentoTime = parseDate(item.dataPagamento);
+
+        if (!inRange(vencimentoTime) && !inRange(pagamentoTime)) return false;
       }
 
       return true;
