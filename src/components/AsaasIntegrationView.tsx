@@ -24,6 +24,7 @@ import {
   Folder,
   FolderOpen,
   Eye,
+  RefreshCw,
 } from 'lucide-react';
 import { findUnidadeForItem, ASAAS_AUTO_IMPORT_INTERVAL_MS } from '../utils/unidades';
 
@@ -47,6 +48,10 @@ interface AsaasIntegrationViewProps {
   sessionToken: string | null;
   onUpdateItem: (item: RecolhimentoItem) => void;
   onAddItem: (item: RecolhimentoItem) => void;
+  // Força na hora a mesma varredura que o ciclo automático de 90s faz —
+  // pedido explícito pra não depender só de esperar o próximo ciclo pra
+  // trazer boleto antigo lançado direto no ASAAS.
+  onImportAsaasHistory: () => Promise<{ imported: number }>;
 }
 
 const onlyDigits = (v: string) => (v || '').replace(/\D/g, '');
@@ -106,7 +111,7 @@ const EMPTY_AD_HOC_FORM = {
   descontoDias: '3',
 };
 
-export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ items, unidades, sessionToken, onUpdateItem, onAddItem }) => {
+export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ items, unidades, sessionToken, onUpdateItem, onAddItem, onImportAsaasHistory }) => {
   // Antes existia toggle Sandbox/Produção — pedido explícito do usuário pra
   // sempre ser real, sem alternância nenhuma (evita esquecer trocado e uma
   // cobrança de verdade cair como teste, ou vice-versa).
@@ -145,6 +150,25 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
     return () => clearInterval(interval);
   }, []);
   const importCountdownLabel = `${Math.floor(secondsUntilImportCheck / 60)}:${String(secondsUntilImportCheck % 60).padStart(2, '0')}`;
+
+  const [importingHistory, setImportingHistory] = useState(false);
+  const handleImportHistoryNow = async () => {
+    setImportingHistory(true);
+    try {
+      const { imported } = await onImportAsaasHistory();
+      if (imported > 0) {
+        showNotice('success', 'Histórico importado', [
+          `${imported} boleto${imported > 1 ? 's' : ''} do ASAAS que ainda não ${imported > 1 ? 'estavam' : 'estava'} no Munago entrou${imported > 1 ? 'ram' : ''} agora.`,
+        ]);
+      } else {
+        showNotice('success', 'Nada novo pra importar', ['Todo o histórico das unidades com chave ASAAS já está no Munago.']);
+      }
+    } catch (err: any) {
+      showNotice('error', 'Falha ao importar histórico do ASAAS', [err?.message || 'Tenta de novo em alguns segundos.']);
+    } finally {
+      setImportingHistory(false);
+    }
+  };
 
   // Notificação in-app no lugar do alert() nativo do navegador (feio, trava
   // a tela, corta mensagem longa) — usada pros erros de geração de cobrança.
@@ -575,6 +599,23 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
             <Clock className="w-3 h-3 text-white/70" />
             <span className="text-[9px] font-black uppercase tracking-widest text-white/90">{importCountdownLabel}</span>
           </span>
+
+          <button
+            type="button"
+            onClick={handleImportHistoryNow}
+            disabled={importingHistory}
+            title="Busca agora, na hora, todo o histórico de boletos do ASAAS (sem esperar o ciclo automático de 90s)"
+            className="flex items-center gap-1.5 bg-black/20 hover:bg-black/30 disabled:opacity-60 px-2.5 py-1 rounded-full transition-colors"
+          >
+            {importingHistory ? (
+              <Loader2 className="w-3 h-3 text-white/90 animate-spin" />
+            ) : (
+              <RefreshCw className="w-3 h-3 text-white/90" />
+            )}
+            <span className="text-[9px] font-black uppercase tracking-widest text-white/90">
+              {importingHistory ? 'Importando...' : 'Importar histórico'}
+            </span>
+          </button>
 
           <div className="flex items-center gap-1 bg-black/20 p-1 rounded-full">
             {BILLING_TYPE_OPTIONS.map((opt) => (

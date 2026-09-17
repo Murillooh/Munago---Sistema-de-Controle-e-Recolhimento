@@ -596,80 +596,87 @@ export default function App() {
   // unidade com chave configurada, a lista de cobranças da conta ASAAS e
   // cria um lançamento novo pra qualquer uma que ainda não exista aqui
   // (checado pelo asaasId). Sem revisão manual — pedido assim de propósito.
+  // Extraída da closure do efeito de import automático pra também poder ser
+  // chamada na hora por um botão manual (AsaasIntegrationView) — pedido do
+  // usuário pra não depender só do ciclo silencioso de 90s pra trazer
+  // boleto antigo do ASAAS. `cancelledRef` é opcional: o efeito passa a
+  // dele (unmount cancela o ciclo em andamento); o botão manual não passa
+  // nada, então nunca cancela sozinho.
+  const runAsaasImport = async (cancelledRef?: { current: boolean }): Promise<{ imported: number }> => {
+    const unidadesComChave = unidades.filter((u: any) => u.hasAsaasKey);
+    if (unidadesComChave.length === 0) return { imported: 0 };
+
+    // Acumula tudo e manda num POST em lote só no final, em vez de um
+    // fetch individual (handleAddItem) por cobrança nova — um backlog
+    // grande pra importar de uma vez (primeira vez rodando, ou muita
+    // cobrança lançada direto no ASAAS) virava uma rajada de dezenas de
+    // requisições simultâneas, cada uma abrindo sua própria conexão de
+    // banco; foi isso que já estourou o limite de conexões do RDS e
+    // derrubou a API inteira uma vez ("too many clients already").
+    const newItems: RecolhimentoItem[] = [];
+    const existingAsaasIds = new Set(itemsRef.current.filter((i) => i.asaasId).map((i) => i.asaasId));
+
+    for (const unidade of unidadesComChave) {
+      if (cancelledRef?.current) return { imported: 0 };
+      try {
+        const res = await fetch('/api/asaas/list-payments', {
+          method: 'POST',
+          headers: itemsAuthHeaders(),
+          body: JSON.stringify({ unidadeId: unidade.id, sandbox: false }),
+        });
+        if (!res.ok) continue;
+        const data = await res.json();
+        const payments = Array.isArray(data.payments) ? data.payments : [];
+
+        for (const p of payments) {
+          if (existingAsaasIds.has(p.id)) continue;
+
+          const [y, m, d] = String(p.dueDate || '').split('-');
+          const vencimento = d && m && y ? `${d}/${m}/${y}` : '';
+          const dueDate = p.dueDate ? new Date(`${p.dueDate}T00:00:00`) : null;
+          const competencia = dueDate && !isNaN(dueDate.getTime())
+            ? `${MONTHS_PT_ASAAS[dueDate.getMonth()]}/${String(dueDate.getFullYear()).slice(-2)}`
+            : '';
+
+          newItems.push({
+            id: `asaas-${p.id}`,
+            franquia: unidade.nome,
+            cnpj: unidade.cnpj || '',
+            cCusto: unidade.cCustoPadrao || unidade.nome,
+            dataCriacao: new Date().toLocaleDateString('pt-BR'),
+            vencimento,
+            vencimentoOriginal: vencimento,
+            dataPagamento: p.paymentDate ? p.paymentDate.split('-').reverse().join('/') : '',
+            valor: Number(p.value) || 0,
+            status: p.status || 'Aguardando pagamento',
+            competenciaRecolhimento: competencia,
+            competenciaPagamento: '',
+            descricao: p.description || `Cobrança importada do ASAAS (${unidade.nome})`,
+            asaasId: p.id,
+            asaasInvoiceUrl: p.invoiceUrl || undefined,
+            asaasImportedAt: new Date().toISOString(),
+          });
+          existingAsaasIds.add(p.id);
+        }
+      } catch {
+        // Chave com problema momentâneo ou API fora do ar — tenta de novo no próximo ciclo.
+      }
+    }
+
+    if (cancelledRef?.current || newItems.length === 0) return { imported: 0 };
+    const result = await handleImportBulk(newItems);
+    if (result.ok === false) throw new Error(result.error);
+    return { imported: newItems.length };
+  };
+
   useEffect(() => {
     if (!isAuthenticated) return;
-    let cancelled = false;
+    const cancelledRef = { current: false };
 
-    const importNewAsaasCharges = async () => {
-      const unidadesComChave = unidades.filter((u: any) => u.hasAsaasKey);
-      if (unidadesComChave.length === 0) return;
-
-      // Acumula tudo e manda num POST em lote só no final, em vez de um
-      // fetch individual (handleAddItem) por cobrança nova — um backlog
-      // grande pra importar de uma vez (primeira vez rodando, ou muita
-      // cobrança lançada direto no ASAAS) virava uma rajada de dezenas de
-      // requisições simultâneas, cada uma abrindo sua própria conexão de
-      // banco; foi isso que já estourou o limite de conexões do RDS e
-      // derrubou a API inteira uma vez ("too many clients already").
-      const newItems: RecolhimentoItem[] = [];
-      const existingAsaasIds = new Set(itemsRef.current.filter((i) => i.asaasId).map((i) => i.asaasId));
-
-      for (const unidade of unidadesComChave) {
-        if (cancelled) return;
-        try {
-          const res = await fetch('/api/asaas/list-payments', {
-            method: 'POST',
-            headers: itemsAuthHeaders(),
-            body: JSON.stringify({ unidadeId: unidade.id, sandbox: false }),
-          });
-          if (!res.ok) continue;
-          const data = await res.json();
-          const payments = Array.isArray(data.payments) ? data.payments : [];
-
-          for (const p of payments) {
-            if (existingAsaasIds.has(p.id)) continue;
-
-            const [y, m, d] = String(p.dueDate || '').split('-');
-            const vencimento = d && m && y ? `${d}/${m}/${y}` : '';
-            const dueDate = p.dueDate ? new Date(`${p.dueDate}T00:00:00`) : null;
-            const competencia = dueDate && !isNaN(dueDate.getTime())
-              ? `${MONTHS_PT_ASAAS[dueDate.getMonth()]}/${String(dueDate.getFullYear()).slice(-2)}`
-              : '';
-
-            newItems.push({
-              id: `asaas-${p.id}`,
-              franquia: unidade.nome,
-              cnpj: unidade.cnpj || '',
-              cCusto: unidade.cCustoPadrao || unidade.nome,
-              dataCriacao: new Date().toLocaleDateString('pt-BR'),
-              vencimento,
-              vencimentoOriginal: vencimento,
-              dataPagamento: p.paymentDate ? p.paymentDate.split('-').reverse().join('/') : '',
-              valor: Number(p.value) || 0,
-              status: p.status || 'Aguardando pagamento',
-              competenciaRecolhimento: competencia,
-              competenciaPagamento: '',
-              descricao: p.description || `Cobrança importada do ASAAS (${unidade.nome})`,
-              asaasId: p.id,
-              asaasInvoiceUrl: p.invoiceUrl || undefined,
-              asaasImportedAt: new Date().toISOString(),
-            });
-            existingAsaasIds.add(p.id);
-          }
-        } catch {
-          // Chave com problema momentâneo ou API fora do ar — tenta de novo no próximo ciclo.
-        }
-      }
-
-      if (!cancelled && newItems.length > 0) {
-        await handleImportBulk(newItems);
-      }
-    };
-
-    importNewAsaasCharges();
-    const interval = setInterval(importNewAsaasCharges, ASAAS_AUTO_IMPORT_INTERVAL_MS);
+    runAsaasImport(cancelledRef);
+    const interval = setInterval(() => runAsaasImport(cancelledRef), ASAAS_AUTO_IMPORT_INTERVAL_MS);
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
       clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -995,7 +1002,7 @@ export default function App() {
               <NotificationsView items={items} goalSettings={goalSettings} searchTerm={searchTerm} sessionToken={sessionToken} />
             )}
             {activeTab === 'asaas' && canAccessTab(currentUser, 'asaas') && (
-              <AsaasIntegrationView items={items} unidades={unidades} sessionToken={sessionToken} onUpdateItem={handleUpdateItem} onAddItem={handleAddItem} />
+              <AsaasIntegrationView items={items} unidades={unidades} sessionToken={sessionToken} onUpdateItem={handleUpdateItem} onAddItem={handleAddItem} onImportAsaasHistory={runAsaasImport} />
             )}
             {activeTab === 'usuarios' && currentUser?.role === 'admin' && (
               <AdminUsersView sessionToken={sessionToken} currentUserId={currentUser.id} />
