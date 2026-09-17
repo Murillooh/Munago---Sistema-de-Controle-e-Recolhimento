@@ -371,17 +371,24 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
         competenciaFilter === 'todas' || item.competenciaRecolhimento === competenciaFilter;
       const matchesCCusto = cCustoFilter === 'todos' || item.cCusto === cCustoFilter;
 
+      // Casa se QUALQUER uma das datas do item (vencimento, criação ou
+      // pagamento) cair no range — antes só olhava vencimento (com criação
+      // só como fallback pra vencimento vazio), então um item criado dentro
+      // do período mas com vencimento no mês seguinte desaparecia do filtro.
       let matchesDate = true;
-      const itemDate = parseDateString(item.vencimento) || parseDateString(item.dataCriacao);
-      if (itemDate) {
-        if (startDate && itemDate < new Date(startDate)) {
-          matchesDate = false;
-        }
-        if (endDate && itemDate > new Date(endDate)) {
-          matchesDate = false;
-        }
-      } else if (startDate || endDate) {
-        matchesDate = false;
+      if (startDate || endDate) {
+        const start = startDate ? new Date(startDate) : null;
+        const end = endDate ? new Date(endDate) : null;
+        const inRange = (d: Date | null) => {
+          if (!d) return false;
+          if (start && d < start) return false;
+          if (end && d > end) return false;
+          return true;
+        };
+        matchesDate =
+          inRange(parseDateString(item.vencimento)) ||
+          inRange(parseDateString(item.dataCriacao)) ||
+          inRange(parseDateString(item.dataPagamento));
       }
 
       return matchesSearch && matchesStatus && matchesCompetencia && matchesCCusto && matchesDate;
