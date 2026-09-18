@@ -297,7 +297,16 @@ export default function App() {
   useEffect(() => {
     // Cache local: garante que o sistema funciona normalmente mesmo sem banco
     // configurado, ou se a API estiver fora do ar. Isolado por usuário.
-    localStorage.setItem(storageKey('locgrupo_recolhimentos'), JSON.stringify(items));
+    // Conta com milhares de itens (import ASAAS de histórico grande) estoura
+    // a cota do localStorage (~5-10MB por site) — QuotaExceededError aqui
+    // ficava sem tratamento nenhum, virando exceção não capturada que
+    // poluía o console e podia interromper outra coisa no meio.
+    try {
+      localStorage.setItem(storageKey('locgrupo_recolhimentos'), JSON.stringify(items));
+    } catch {
+      // Sem espaço pra cachear tudo — sistema continua funcionando normal
+      // pelo estado em memória e pelo banco, só perde o cache offline.
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, currentUser]);
 
@@ -828,22 +837,40 @@ export default function App() {
   const handleImportBulk = async (newItems: RecolhimentoItem[]): Promise<{ ok: true } | { ok: false; error: string }> => {
     const ids = new Set(newItems.map((i) => i.id));
     setItems((prev) => [...newItems, ...prev]);
+
+    // Histórico grande do ASAAS pode juntar milhares de itens (visto na
+    // prática: 15854 de uma vez, 4 unidades) — um POST só com tudo isso
+    // passa do limite de tamanho de requisição da Vercel e volta 413
+    // (Content Too Large) antes de chegar no handler, sem gravar nada.
+    // Quebra em lotes menores, um POST sequencial por vez (o servidor já é
+    // idempotente por id — ON CONFLICT DO NOTHING — então repetir ou
+    // dividir não duplica nada).
+    const BATCH_SIZE = 500;
+    const batches: RecolhimentoItem[][] = [];
+    for (let i = 0; i < newItems.length; i += BATCH_SIZE) {
+      batches.push(newItems.slice(i, i + BATCH_SIZE));
+    }
+
     try {
-      const res = await fetch('/api/items/bulk', {
-        method: 'POST',
-        headers: itemsAuthHeaders(),
-        body: JSON.stringify(newItems),
-      });
-      // 503 = banco não configurado ainda: modo local de sempre, não é falha
-      // de verdade — os itens ficam só no navegador, sem rollback.
-      if (res.status === 503) return { ok: true };
-      if (!res.ok) {
-        setItems((prev) => prev.filter((item) => !ids.has(item.id)));
-        // O motivo real do servidor (ex: erro de conexão com o banco, linha
-        // com dado que a coluna recusa) ia pro limbo antes — só um "tente de
-        // novo" genérico que não ajuda a saber o que corrigir na planilha.
-        const data = await res.json().catch(() => ({}) as any);
-        return { ok: false, error: data.error || data.details || `Servidor recusou o import (HTTP ${res.status}).` };
+      for (const batch of batches) {
+        const res = await fetch('/api/items/bulk', {
+          method: 'POST',
+          headers: itemsAuthHeaders(),
+          body: JSON.stringify(batch),
+        });
+        // 503 = banco não configurado ainda: modo local de sempre, não é
+        // falha de verdade — os itens ficam só no navegador, sem rollback.
+        // Se o primeiro lote já vem 503, os próximos viriam igual — não
+        // vale gastar as chamadas restantes.
+        if (res.status === 503) return { ok: true };
+        if (!res.ok) {
+          setItems((prev) => prev.filter((item) => !ids.has(item.id)));
+          // O motivo real do servidor (ex: erro de conexão com o banco, linha
+          // com dado que a coluna recusa) ia pro limbo antes — só um "tente de
+          // novo" genérico que não ajuda a saber o que corrigir na planilha.
+          const data = await res.json().catch(() => ({}) as any);
+          return { ok: false, error: data.error || data.details || `Servidor recusou o import (HTTP ${res.status}).` };
+        }
       }
       return { ok: true };
     } catch (err: any) {
