@@ -286,6 +286,10 @@ export async function createApp() {
                         THEN TO_DATE(data_criacao, 'DD/MM/YYYY') END DESC NULLS LAST`,
         [ownerId]
       );
+      // Log temporário — diagnosticar "não importa mais nada do ASAAS" sem
+      // tocar em credencial nenhuma: só conta o que já tá gravado de fato.
+      const comAsaasId = result.rows.filter((r: any) => r.asaas_id).length;
+      console.log(`[items] owner=${ownerId} total=${result.rows.length} comAsaasId=${comAsaasId}`);
       res.json(result.rows.map(rowToItem));
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao buscar lançamentos.', details: err.message });
