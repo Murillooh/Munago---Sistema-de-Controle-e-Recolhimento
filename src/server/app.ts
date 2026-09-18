@@ -275,8 +275,15 @@ export async function createApp() {
   app.get('/api/items', requireDb, requireAuth, async (req, res) => {
     try {
       const ownerId = (req as any).authUser.id;
+      // data_criacao é TEXT em "DD/MM/AAAA" — ORDER BY ... DESC direto nessa
+      // coluna ordena por TEXTO (dia primeiro), não por data de verdade. Ex:
+      // "05/09/2026" vinha ANTES de "20/08/2026" porque "0" < "2", mesmo
+      // sendo mais recente. TO_DATE resolve a ordem cronológica de verdade;
+      // linha com data vazia/inválida (não bate o regex) some pro fim.
       const result = await pool!.query(
-        'SELECT * FROM recolhimentos WHERE owner_id = $1 ORDER BY data_criacao DESC',
+        `SELECT * FROM recolhimentos WHERE owner_id = $1
+         ORDER BY CASE WHEN data_criacao ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
+                        THEN TO_DATE(data_criacao, 'DD/MM/YYYY') END DESC NULLS LAST`,
         [ownerId]
       );
       res.json(result.rows.map(rowToItem));

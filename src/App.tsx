@@ -622,19 +622,6 @@ export default function App() {
     };
   };
 
-  // Import manual de boletos já escolhidos no preview (Bases > Unidades) —
-  // o usuário decide ali quais linhas quer (ou todas), aqui só filtra o que
-  // já existe (por asaasId, mesmo critério do import automático) e grava.
-  const importAsaasBoletos = async (unidade: any, payments: any[]): Promise<{ imported: number }> => {
-    const existingAsaasIds = new Set(itemsRef.current.filter((i) => i.asaasId).map((i) => i.asaasId));
-    const newItems = payments
-      .filter((p) => !existingAsaasIds.has(p.id))
-      .map((p) => mapAsaasPaymentToItem(unidade, p));
-    if (newItems.length === 0) return { imported: 0 };
-    const result = await handleImportBulk(newItems);
-    if (result.ok === false) throw new Error(result.error);
-    return { imported: newItems.length };
-  };
 
   // Cobranças lançadas direto no painel do ASAAS (sem passar pelo botão
   // "Gerar no ASAAS" daqui) não tinham como entrar no Munago — o sistema só
@@ -1015,7 +1002,6 @@ export default function App() {
                 categorias={baseCategories}
                 canEditUnidades={currentUser?.role === 'admin'}
                 sessionToken={sessionToken}
-                onImportAsaasBoletos={importAsaasBoletos}
                 onAddUnidade={handleAddUnidade}
                 onUpdateUnidade={handleUpdateUnidade}
                 onDeleteUnidade={handleDeleteUnidade}

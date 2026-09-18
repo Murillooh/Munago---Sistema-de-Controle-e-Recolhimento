@@ -392,7 +392,16 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
       }
 
       return matchesSearch && matchesStatus && matchesCompetencia && matchesCCusto && matchesDate;
-    });
+    })
+      // Recente sempre no topo, por data de criação — sem isso a ordem fica
+      // à mercê do que o servidor devolveu (que tinha um bug: comparava
+      // "DD/MM/AAAA" como texto, não como data de verdade). Item sem data de
+      // criação legível vai pro fim, não pro topo.
+      .sort((a, b) => {
+        const da = parseDateString(a.dataCriacao)?.getTime() ?? -Infinity;
+        const db = parseDateString(b.dataCriacao)?.getTime() ?? -Infinity;
+        return db - da;
+      });
   }, [items, search, searchTerm, statusFilter, competenciaFilter, cCustoFilter, startDate, endDate]);
 
   // Paginação — uma planilha importada facilmente passa de 500-600 linhas;
