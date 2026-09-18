@@ -619,14 +619,27 @@ export default function App() {
     for (const unidade of unidadesComChave) {
       if (cancelledRef?.current) return { imported: 0 };
       try {
-        const res = await fetch('/api/asaas/list-payments', {
-          method: 'POST',
-          headers: itemsAuthHeaders(),
-          body: JSON.stringify({ unidadeId: unidade.id, sandbox: false }),
-        });
-        if (!res.ok) continue;
-        const data = await res.json();
-        const payments = Array.isArray(data.payments) ? data.payments : [];
+        // Servidor devolve só uma página (100) por chamada agora — pedir de
+        // novo com `offset` até `hasMore` vir false, em vez de uma função só
+        // paginando internamente (isso estourava o timeout da Vercel em
+        // unidade com histórico grande e a rota inteira caía com 504).
+        const payments: any[] = [];
+        let offset = 0;
+        const MAX_PAGES = 50; // trava de segurança: até 5000 cobranças por unidade
+        for (let page = 0; page < MAX_PAGES; page++) {
+          if (cancelledRef?.current) return { imported: 0 };
+          const res = await fetch('/api/asaas/list-payments', {
+            method: 'POST',
+            headers: itemsAuthHeaders(),
+            body: JSON.stringify({ unidadeId: unidade.id, sandbox: false, offset }),
+          });
+          if (!res.ok) break;
+          const data = await res.json();
+          const pageItems = Array.isArray(data.payments) ? data.payments : [];
+          payments.push(...pageItems);
+          if (!data.hasMore) break;
+          offset = data.nextOffset ?? offset + pageItems.length;
+        }
 
         for (const p of payments) {
           if (existingAsaasIds.has(p.id)) continue;

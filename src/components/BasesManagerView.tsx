@@ -74,31 +74,45 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
   const [boletoPreview, setBoletoPreview] = useState<{
     unidade: Unidade;
     loading: boolean;
+    loadedCount: number;
     payments: AsaasBoletoPreview[] | null;
     error: string | null;
   } | null>(null);
 
   const handleViewBoletos = async (unidade: Unidade) => {
-    setBoletoPreview({ unidade, loading: true, payments: null, error: null });
+    setBoletoPreview({ unidade, loading: true, loadedCount: 0, payments: null, error: null });
+    // Servidor devolve só uma página (100) por chamada — pede de novo com
+    // `offset` até `hasMore` vir false, em vez de esperar uma função só
+    // buscar tudo de uma vez (isso estourava o timeout da Vercel em unidade
+    // com histórico grande e a rota inteira caía com 504, sem mostrar nada).
+    const payments: AsaasBoletoPreview[] = [];
+    let offset = 0;
+    const MAX_PAGES = 50; // trava de segurança: até 5000 boletos por unidade
     try {
-      const res = await fetch('/api/asaas/list-payments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
-        },
-        body: JSON.stringify({ unidadeId: unidade.id, sandbox: false }),
-      });
-      const data = await res.json().catch(() => ({}) as any);
-      if (!res.ok) {
-        setBoletoPreview({ unidade, loading: false, payments: null, error: data.error || `Falha ao buscar no ASAAS (HTTP ${res.status}).` });
-        return;
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const res = await fetch('/api/asaas/list-payments', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+          },
+          body: JSON.stringify({ unidadeId: unidade.id, sandbox: false, offset }),
+        });
+        const data = await res.json().catch(() => ({}) as any);
+        if (!res.ok) {
+          setBoletoPreview({ unidade, loading: false, loadedCount: payments.length, payments: null, error: data.error || `Falha ao buscar no ASAAS (HTTP ${res.status}).` });
+          return;
+        }
+        const pageItems = Array.isArray(data.payments) ? data.payments : [];
+        payments.push(...pageItems);
+        setBoletoPreview({ unidade, loading: true, loadedCount: payments.length, payments: null, error: null });
+        if (!data.hasMore) break;
+        offset = data.nextOffset ?? offset + pageItems.length;
       }
-      const payments = Array.isArray(data.payments) ? data.payments : [];
-      payments.sort((a: AsaasBoletoPreview, b: AsaasBoletoPreview) => (b.dueDate || '').localeCompare(a.dueDate || ''));
-      setBoletoPreview({ unidade, loading: false, payments, error: null });
+      payments.sort((a, b) => (b.dueDate || '').localeCompare(a.dueDate || ''));
+      setBoletoPreview({ unidade, loading: false, loadedCount: payments.length, payments, error: null });
     } catch (err: any) {
-      setBoletoPreview({ unidade, loading: false, payments: null, error: err?.message || 'Falha de conexão com o servidor.' });
+      setBoletoPreview({ unidade, loading: false, loadedCount: payments.length, payments: null, error: err?.message || 'Falha de conexão com o servidor.' });
     }
   };
 
@@ -461,7 +475,9 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                 {boletoPreview.loading && (
                   <div className="flex flex-col items-center justify-center gap-3 py-16 text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin" />
-                    <span className="text-xs font-bold">Buscando no ASAAS...</span>
+                    <span className="text-xs font-bold">
+                      {boletoPreview.loadedCount > 0 ? `Buscando no ASAAS... (${boletoPreview.loadedCount} até agora)` : 'Buscando no ASAAS...'}
+                    </span>
                   </div>
                 )}
 

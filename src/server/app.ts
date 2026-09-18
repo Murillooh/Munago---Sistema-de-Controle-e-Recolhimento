@@ -1407,34 +1407,29 @@ export async function createApp() {
   // o que já existe (por asaasId) e o que é novo; aqui só devolve a lista
   // crua, já com status traduzido pro padrão do Munago.
   app.post('/api/asaas/list-payments', requireAuth, async (req, res) => {
-    const { sandbox } = req.body || {};
+    const { sandbox, offset: rawOffset } = req.body || {};
     const token = await getAsaasToken(req);
     if (!token) return res.status(400).json({ error: 'Chave API ASAAS obrigatória.' });
 
     const baseUrl = sandbox ? 'https://sandbox.asaas.com/v3' : 'https://api.asaas.com/v3';
+    // Busca só UMA página (100, o máximo do ASAAS) por chamada — devolve
+    // hasMore/nextOffset pro cliente pedir a próxima. Antes paginava até 50
+    // páginas inteiras dentro da mesma função, e uma unidade com histórico
+    // grande (ou ASAAS respondendo devagar) estourava os 10s do plano
+    // Hobby da Vercel e a rota inteira caía com 504 sem devolver nada.
+    const PAGE_LIMIT = 100;
+    const offset = Number.isFinite(Number(rawOffset)) && Number(rawOffset) >= 0 ? Number(rawOffset) : 0;
     try {
-      // limit=100 é o máximo por página da API do ASAAS. Pagina com `offset`
-      // até `hasMore` vir false, senão só a leva mais recente entrava — todo
-      // histórico anterior a isso nunca era importado pro Munago.
-      const payments: any[] = [];
-      let offset = 0;
-      const PAGE_LIMIT = 100;
-      const MAX_PAGES = 50; // trava de segurança: até 5000 cobranças por unidade
-      for (let page = 0; page < MAX_PAGES; page++) {
-        const response = await fetch(`${baseUrl}/payments?limit=${PAGE_LIMIT}&offset=${offset}`, {
-          headers: { 'access_token': token, 'Content-Type': 'application/json' },
-        });
-        if (!response.ok) {
-          const error = await readAsaasError(response, 'Falha ao listar cobranças no ASAAS.');
-          return res.status(response.status).json({ error });
-        }
-        const data = await response.json();
-        const pageItems = Array.isArray(data.data) ? data.data : [];
-        payments.push(...pageItems);
-        if (!data.hasMore || pageItems.length === 0) break;
-        offset += PAGE_LIMIT;
+      const response = await fetch(`${baseUrl}/payments?limit=${PAGE_LIMIT}&offset=${offset}`, {
+        headers: { 'access_token': token, 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) {
+        const error = await readAsaasError(response, 'Falha ao listar cobranças no ASAAS.');
+        return res.status(response.status).json({ error });
       }
-      const mapped = payments.map((p: any) => ({
+      const data = await response.json();
+      const pageItems = Array.isArray(data.data) ? data.data : [];
+      const mapped = pageItems.map((p: any) => ({
         id: p.id,
         value: p.value,
         dueDate: p.dueDate,
@@ -1443,7 +1438,8 @@ export async function createApp() {
         invoiceUrl: p.invoiceUrl || p.bankSlipUrl,
         paymentDate: p.paymentDate,
       }));
-      res.json({ success: true, payments: mapped });
+      const hasMore = Boolean(data.hasMore) && pageItems.length > 0;
+      res.json({ success: true, payments: mapped, hasMore, nextOffset: offset + PAGE_LIMIT });
     } catch (err: any) {
       res.status(502).json({ error: 'Falha ao comunicar com a API do ASAAS: ' + err.message });
     }
