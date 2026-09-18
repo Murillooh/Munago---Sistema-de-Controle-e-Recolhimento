@@ -12,6 +12,12 @@ interface BasesManagerViewProps {
   // não têm esse dado sensível, continuam liberadas pra qualquer um.
   canEditUnidades: boolean;
   sessionToken: string | null;
+  // Import de verdade pra Planilha — pedido explícito pra poder revisar no
+  // preview (com filtro de data lá na Planilha depois) em vez de só olhar
+  // sem poder trazer pro Munago. Mesmo mapeamento/dedup (por asaasId) do
+  // import automático de 90s (App.tsx), só que sob demanda com o que o
+  // usuário escolheu aqui (ou tudo, se nada tiver marcado).
+  onImportAsaasBoletos: (unidade: Unidade, payments: any[]) => Promise<{ imported: number }>;
   onAddUnidade: (u: Unidade) => void;
   onUpdateUnidade: (u: Unidade) => void;
   onDeleteUnidade: (id: string) => void;
@@ -73,6 +79,7 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
   categorias,
   canEditUnidades,
   sessionToken,
+  onImportAsaasBoletos,
   onAddUnidade,
   onUpdateUnidade,
   onDeleteUnidade,
@@ -180,6 +187,29 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
       await exportToPDF(items, `boletos_asaas_${safeName}.pdf`, undefined, undefined, sessionToken);
     } finally {
       setDownloadingBoletosPdf(false);
+    }
+  };
+
+  const [importingBoletos, setImportingBoletos] = useState(false);
+  const handleImportSelectedBoletos = async () => {
+    if (!boletoPreview?.payments || boletoPreview.payments.length === 0) return;
+    const toImport = selectedBoletoIds.size > 0
+      ? boletoPreview.payments.filter((p) => selectedBoletoIds.has(p.id))
+      : boletoPreview.payments;
+    if (toImport.length === 0) return;
+    setImportingBoletos(true);
+    try {
+      const { imported } = await onImportAsaasBoletos(boletoPreview.unidade, toImport);
+      if (imported > 0) {
+        showToast(`${imported} boleto${imported > 1 ? 's' : ''} importado${imported > 1 ? 's' : ''} pra Planilha — já dá pra filtrar por data lá.`);
+        setSelectedBoletoIds(new Set());
+      } else {
+        showToast('Nada novo — esse(s) boleto(s) já estava(m) no Munago.');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Falha ao importar pro Munago. Tenta de novo em alguns segundos.');
+    } finally {
+      setImportingBoletos(false);
     }
   };
 
@@ -528,9 +558,28 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
               <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50 shrink-0">
                 <div>
                   <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">Boletos ASAAS — {boletoPreview.unidade.nome}</h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Só visualização — nada aqui entra no Munago.</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Visualizar e baixar PDF não gravam nada — só "Importar pra Planilha" grava.</p>
                 </div>
                 <div className="flex items-center gap-2">
+                  {boletoPreview.payments && boletoPreview.payments.length > 0 && (
+                    <button
+                      onClick={handleImportSelectedBoletos}
+                      disabled={importingBoletos || boletoPreview.loading}
+                      title={boletoPreview.loading ? 'Espera terminar de carregar pra importar a lista completa' : 'Grava esses boletos como lançamento no Munago (Planilha) — dá pra filtrar por data lá depois'}
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
+                    >
+                      {importingBoletos ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Database className="w-3.5 h-3.5" />}
+                      <span>
+                        {importingBoletos
+                          ? 'Importando...'
+                          : boletoPreview.loading
+                          ? 'Carregando...'
+                          : selectedBoletoIds.size > 0
+                          ? `Importar pra Planilha (${selectedBoletoIds.size})`
+                          : 'Importar pra Planilha (tudo)'}
+                      </span>
+                    </button>
+                  )}
                   {boletoPreview.payments && boletoPreview.payments.length > 0 && (
                     <button
                       onClick={handleDownloadBoletosPdf}

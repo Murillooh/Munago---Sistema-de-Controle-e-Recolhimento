@@ -590,6 +590,52 @@ export default function App() {
 
   const MONTHS_PT_ASAAS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
+  // Converte um pagamento cru do ASAAS pro formato RecolhimentoItem do
+  // Munago — usado tanto pelo import automático (abaixo) quanto pelo import
+  // manual de boletos já revisados no preview (Bases > Unidades > Ver
+  // boletos), pra não ter duas versões divergentes desse mapeamento.
+  const mapAsaasPaymentToItem = (unidade: any, p: any): RecolhimentoItem => {
+    const [y, m, d] = String(p.dueDate || '').split('-');
+    const vencimento = d && m && y ? `${d}/${m}/${y}` : '';
+    const dueDate = p.dueDate ? new Date(`${p.dueDate}T00:00:00`) : null;
+    const competencia = dueDate && !isNaN(dueDate.getTime())
+      ? `${MONTHS_PT_ASAAS[dueDate.getMonth()]}/${String(dueDate.getFullYear()).slice(-2)}`
+      : '';
+
+    return {
+      id: `asaas-${p.id}`,
+      franquia: unidade.nome,
+      cnpj: unidade.cnpj || '',
+      cCusto: unidade.cCustoPadrao || unidade.nome,
+      dataCriacao: new Date().toLocaleDateString('pt-BR'),
+      vencimento,
+      vencimentoOriginal: vencimento,
+      dataPagamento: p.paymentDate ? p.paymentDate.split('-').reverse().join('/') : '',
+      valor: Number(p.value) || 0,
+      status: p.status || 'Aguardando pagamento',
+      competenciaRecolhimento: competencia,
+      competenciaPagamento: '',
+      descricao: p.description || `Cobrança importada do ASAAS (${unidade.nome})`,
+      asaasId: p.id,
+      asaasInvoiceUrl: p.invoiceUrl || undefined,
+      asaasImportedAt: new Date().toISOString(),
+    };
+  };
+
+  // Import manual de boletos já escolhidos no preview (Bases > Unidades) —
+  // o usuário decide ali quais linhas quer (ou todas), aqui só filtra o que
+  // já existe (por asaasId, mesmo critério do import automático) e grava.
+  const importAsaasBoletos = async (unidade: any, payments: any[]): Promise<{ imported: number }> => {
+    const existingAsaasIds = new Set(itemsRef.current.filter((i) => i.asaasId).map((i) => i.asaasId));
+    const newItems = payments
+      .filter((p) => !existingAsaasIds.has(p.id))
+      .map((p) => mapAsaasPaymentToItem(unidade, p));
+    if (newItems.length === 0) return { imported: 0 };
+    const result = await handleImportBulk(newItems);
+    if (result.ok === false) throw new Error(result.error);
+    return { imported: newItems.length };
+  };
+
   // Cobranças lançadas direto no painel do ASAAS (sem passar pelo botão
   // "Gerar no ASAAS" daqui) não tinham como entrar no Munago — o sistema só
   // conferia status de cobranças que ELE MESMO criou. Isso varre, pra cada
@@ -643,32 +689,7 @@ export default function App() {
 
         for (const p of payments) {
           if (existingAsaasIds.has(p.id)) continue;
-
-          const [y, m, d] = String(p.dueDate || '').split('-');
-          const vencimento = d && m && y ? `${d}/${m}/${y}` : '';
-          const dueDate = p.dueDate ? new Date(`${p.dueDate}T00:00:00`) : null;
-          const competencia = dueDate && !isNaN(dueDate.getTime())
-            ? `${MONTHS_PT_ASAAS[dueDate.getMonth()]}/${String(dueDate.getFullYear()).slice(-2)}`
-            : '';
-
-          newItems.push({
-            id: `asaas-${p.id}`,
-            franquia: unidade.nome,
-            cnpj: unidade.cnpj || '',
-            cCusto: unidade.cCustoPadrao || unidade.nome,
-            dataCriacao: new Date().toLocaleDateString('pt-BR'),
-            vencimento,
-            vencimentoOriginal: vencimento,
-            dataPagamento: p.paymentDate ? p.paymentDate.split('-').reverse().join('/') : '',
-            valor: Number(p.value) || 0,
-            status: p.status || 'Aguardando pagamento',
-            competenciaRecolhimento: competencia,
-            competenciaPagamento: '',
-            descricao: p.description || `Cobrança importada do ASAAS (${unidade.nome})`,
-            asaasId: p.id,
-            asaasInvoiceUrl: p.invoiceUrl || undefined,
-            asaasImportedAt: new Date().toISOString(),
-          });
+          newItems.push(mapAsaasPaymentToItem(unidade, p));
           existingAsaasIds.add(p.id);
         }
       } catch {
@@ -994,6 +1015,7 @@ export default function App() {
                 categorias={baseCategories}
                 canEditUnidades={currentUser?.role === 'admin'}
                 sessionToken={sessionToken}
+                onImportAsaasBoletos={importAsaasBoletos}
                 onAddUnidade={handleAddUnidade}
                 onUpdateUnidade={handleUpdateUnidade}
                 onDeleteUnidade={handleDeleteUnidade}
