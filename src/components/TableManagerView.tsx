@@ -389,6 +389,19 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
           inRange(parseDateString(item.vencimento)) ||
           inRange(parseDateString(item.dataCriacao)) ||
           inRange(parseDateString(item.dataPagamento));
+      } else {
+        // Sem filtro de data escolhido, esconde vencimento fora do mês
+        // atual + anterior — pedido do usuário pra boleto antigo trazido do
+        // ASAAS (dataCriacao = hoje, vencimento de 2024/2025) não lotar a
+        // tela sozinho; só aparece de novo se o usuário pedir com o filtro
+        // de data. Item sem vencimento legível não é escondido (nada pra
+        // julgar a idade dele).
+        const vencimento = parseDateString(item.vencimento);
+        if (vencimento) {
+          const windowStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const windowEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+          matchesDate = vencimento >= windowStart && vencimento <= windowEnd;
+        }
       }
 
       return matchesSearch && matchesStatus && matchesCompetencia && matchesCCusto && matchesDate;
@@ -1040,6 +1053,11 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
                 {filteredItems.length} <span className="text-slate-400 dark:text-slate-600 font-bold text-[10px]">/ {items.length}</span>
               </span>
             </div>
+            {!startDate && !endDate && filteredItems.length < items.length && (
+              <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 italic">
+                Mostrando só mês atual + anterior — use o filtro de data pra ver vencimento mais antigo.
+              </span>
+            )}
           </div>
 
           {totalPages > 1 && (
