@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Unidade, BaseCategory, RecolhimentoItem } from '../types';
-import { Plus, Trash2, Edit2, Database, Building2, Tags, Save, X, Search, CheckCircle2, Lock, Eye, Loader2, AlertTriangle, FileText } from 'lucide-react';
+import { Plus, Trash2, Edit2, Database, Building2, Tags, Save, X, Search, CheckCircle2, Lock, Eye, Loader2, AlertTriangle, FileText, CheckSquare, Square } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { exportToPDF } from '../utils/exportImport';
 
@@ -110,7 +110,24 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
     error: string | null;
   } | null>(null);
 
+  // Vazio = exporta tudo (mesmo padrão do Relatórios) — só filtra o PDF
+  // quando o usuário marcar linha específica na tabela.
+  const [selectedBoletoIds, setSelectedBoletoIds] = useState<Set<string>>(new Set());
+  const toggleBoletoSelected = (id: string) => {
+    setSelectedBoletoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleAllBoletosSelected = () => {
+    const all = boletoPreview?.payments || [];
+    setSelectedBoletoIds((prev) => (prev.size === all.length ? new Set() : new Set(all.map((p) => p.id))));
+  };
+
   const handleViewBoletos = async (unidade: Unidade) => {
+    setSelectedBoletoIds(new Set());
     setBoletoPreview({ unidade, loading: true, loadedCount: 0, payments: null, error: null });
     // Servidor devolve só uma página (100) por chamada — pede de novo com
     // `offset` até `hasMore` vir false, em vez de esperar uma função só
@@ -152,9 +169,13 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
   const [downloadingBoletosPdf, setDownloadingBoletosPdf] = useState(false);
   const handleDownloadBoletosPdf = async () => {
     if (!boletoPreview?.payments || boletoPreview.payments.length === 0) return;
+    const toExport = selectedBoletoIds.size > 0
+      ? boletoPreview.payments.filter((p) => selectedBoletoIds.has(p.id))
+      : boletoPreview.payments;
+    if (toExport.length === 0) return;
     setDownloadingBoletosPdf(true);
     try {
-      const items = boletosToReportItems(boletoPreview.unidade, boletoPreview.payments);
+      const items = boletosToReportItems(boletoPreview.unidade, toExport);
       const safeName = boletoPreview.unidade.nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
       await exportToPDF(items, `boletos_asaas_${safeName}.pdf`, undefined, undefined, sessionToken);
     } finally {
@@ -518,7 +539,15 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                       className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
                     >
                       {downloadingBoletosPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-                      <span>{downloadingBoletosPdf ? 'Gerando...' : boletoPreview.loading ? 'Carregando...' : 'Baixar PDF'}</span>
+                      <span>
+                        {downloadingBoletosPdf
+                          ? 'Gerando...'
+                          : boletoPreview.loading
+                          ? 'Carregando...'
+                          : selectedBoletoIds.size > 0
+                          ? `Baixar PDF (${selectedBoletoIds.size})`
+                          : 'Baixar PDF (tudo)'}
+                      </span>
                     </button>
                   )}
                   <button
@@ -556,7 +585,16 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                     <table className="w-full text-left">
                       <thead className="sticky top-0 bg-white dark:bg-slate-900">
                         <tr className="text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                          <th className="py-2.5 px-6">Vencimento</th>
+                          <th className="py-2.5 px-6 w-8">
+                            <button type="button" onClick={toggleAllBoletosSelected} title="Selecionar tudo / limpar seleção">
+                              {selectedBoletoIds.size === boletoPreview.payments.length && boletoPreview.payments.length > 0 ? (
+                                <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
+                              ) : (
+                                <Square className="w-3.5 h-3.5 text-slate-300" />
+                              )}
+                            </button>
+                          </th>
+                          <th className="py-2.5 px-4">Vencimento</th>
                           <th className="py-2.5 px-4">Descrição</th>
                           <th className="py-2.5 px-4">Status</th>
                           <th className="py-2.5 px-4">Pagamento</th>
@@ -565,8 +603,21 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                       </thead>
                       <tbody className="divide-y divide-slate-50 dark:divide-slate-800 text-xs text-slate-700 dark:text-slate-300">
                         {boletoPreview.payments.map((p) => (
-                          <tr key={p.id}>
-                            <td className="py-3 px-6 font-mono text-slate-500">{formatIsoDateBr(p.dueDate)}</td>
+                          <tr
+                            key={p.id}
+                            className={`cursor-pointer hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors ${selectedBoletoIds.has(p.id) ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''}`}
+                            onClick={() => toggleBoletoSelected(p.id)}
+                          >
+                            <td className="py-3 px-6" onClick={(e) => e.stopPropagation()}>
+                              <button type="button" onClick={() => toggleBoletoSelected(p.id)}>
+                                {selectedBoletoIds.has(p.id) ? (
+                                  <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
+                                ) : (
+                                  <Square className="w-3.5 h-3.5 text-slate-300" />
+                                )}
+                              </button>
+                            </td>
+                            <td className="py-3 px-4 font-mono text-slate-500">{formatIsoDateBr(p.dueDate)}</td>
                             <td className="py-3 px-4 max-w-[420px] truncate" title={p.description}>{p.description || '-'}</td>
                             <td className="py-3 px-4">{p.status}</td>
                             <td className="py-3 px-4 font-mono text-slate-500">{formatIsoDateBr(p.paymentDate)}</td>
@@ -592,6 +643,8 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                 <div className="px-6 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 text-[11px] font-bold text-slate-500 dark:text-slate-400 shrink-0">
                   {boletoPreview.loading
                     ? `${boletoPreview.payments.length} boleto${boletoPreview.payments.length > 1 ? 's' : ''} carregado${boletoPreview.payments.length > 1 ? 's' : ''} até agora...`
+                    : selectedBoletoIds.size > 0
+                    ? `${selectedBoletoIds.size} de ${boletoPreview.payments.length} boletos selecionados.`
                     : `${boletoPreview.payments.length} boleto${boletoPreview.payments.length > 1 ? 's' : ''} encontrado${boletoPreview.payments.length > 1 ? 's' : ''} no ASAAS.`}
                 </div>
               )}
