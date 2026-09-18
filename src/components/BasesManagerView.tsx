@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
-import { Unidade, BaseCategory } from '../types';
-import { Plus, Trash2, Edit2, Database, Building2, Tags, Save, X, Search, CheckCircle2, Lock, Eye, Loader2, AlertTriangle } from 'lucide-react';
+import { Unidade, BaseCategory, RecolhimentoItem } from '../types';
+import { Plus, Trash2, Edit2, Database, Building2, Tags, Save, X, Search, CheckCircle2, Lock, Eye, Loader2, AlertTriangle, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { exportToPDF } from '../utils/exportImport';
 
 interface BasesManagerViewProps {
   unidades: Unidade[];
@@ -21,7 +22,10 @@ interface BasesManagerViewProps {
 
 // Boleto cru, como a API do ASAAS devolve (via /api/asaas/list-payments) —
 // dueDate/paymentDate ainda em ISO (yyyy-mm-dd), não no formato BR do resto
-// do Munago, porque isso aqui é só PREVIEW: nada disso vira RecolhimentoItem.
+// do Munago. Isso aqui é só PREVIEW: nunca é salvo/importado no banco do
+// Munago (onAddItem/onImportBulk não entram em cena); o PDF abaixo só
+// reaproveita o MESMO formato RecolhimentoItem, em memória, pra cair no
+// gerador de relatório que já existe (capa + tabela por unidade).
 interface AsaasBoletoPreview {
   id: string;
   value: number;
@@ -36,6 +40,33 @@ const formatIsoDateBr = (iso?: string) => {
   const [y, m, d] = iso.split('-');
   return d && m && y ? `${d}/${m}/${y}` : iso;
 };
+
+const MONTHS_PT_ASAAS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+// Mesmo mapeamento de campos que o import de verdade (App.tsx) usa — só que
+// aqui o resultado nunca sai da memória do navegador pra virar um PDF.
+const boletosToReportItems = (unidade: Unidade, boletos: AsaasBoletoPreview[]): RecolhimentoItem[] =>
+  boletos.map((p) => {
+    const dueDate = p.dueDate ? new Date(`${p.dueDate}T00:00:00`) : null;
+    const competencia = dueDate && !isNaN(dueDate.getTime())
+      ? `${MONTHS_PT_ASAAS[dueDate.getMonth()]}/${String(dueDate.getFullYear()).slice(-2)}`
+      : '-';
+    return {
+      id: `asaas-preview-${p.id}`,
+      franquia: unidade.nome,
+      cnpj: unidade.cnpj || '',
+      cCusto: unidade.cCustoPadrao || unidade.nome,
+      dataCriacao: '',
+      vencimento: formatIsoDateBr(p.dueDate) === '-' ? '' : formatIsoDateBr(p.dueDate),
+      vencimentoOriginal: '',
+      dataPagamento: p.paymentDate ? formatIsoDateBr(p.paymentDate) : '',
+      valor: Number(p.value) || 0,
+      status: (p.status as RecolhimentoItem['status']) || 'Aguardando pagamento',
+      competenciaRecolhimento: competencia,
+      competenciaPagamento: '',
+      descricao: p.description || '',
+    };
+  });
 
 export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
   unidades,
@@ -113,6 +144,19 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
       setBoletoPreview({ unidade, loading: false, loadedCount: payments.length, payments, error: null });
     } catch (err: any) {
       setBoletoPreview({ unidade, loading: false, loadedCount: payments.length, payments: null, error: err?.message || 'Falha de conexão com o servidor.' });
+    }
+  };
+
+  const [downloadingBoletosPdf, setDownloadingBoletosPdf] = useState(false);
+  const handleDownloadBoletosPdf = async () => {
+    if (!boletoPreview?.payments || boletoPreview.payments.length === 0) return;
+    setDownloadingBoletosPdf(true);
+    try {
+      const items = boletosToReportItems(boletoPreview.unidade, boletoPreview.payments);
+      const safeName = boletoPreview.unidade.nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+      await exportToPDF(items, `boletos_asaas_${safeName}.pdf`, undefined, undefined, sessionToken);
+    } finally {
+      setDownloadingBoletosPdf(false);
     }
   };
 
@@ -463,12 +507,24 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                   <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">Boletos ASAAS — {boletoPreview.unidade.nome}</h3>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Só visualização — nada aqui entra no Munago.</p>
                 </div>
-                <button
-                  onClick={() => setBoletoPreview(null)}
-                  className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {boletoPreview.payments && boletoPreview.payments.length > 0 && (
+                    <button
+                      onClick={handleDownloadBoletosPdf}
+                      disabled={downloadingBoletosPdf}
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
+                    >
+                      {downloadingBoletosPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                      <span>{downloadingBoletosPdf ? 'Gerando...' : 'Baixar PDF'}</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setBoletoPreview(null)}
+                    className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               <div className="overflow-y-auto">
