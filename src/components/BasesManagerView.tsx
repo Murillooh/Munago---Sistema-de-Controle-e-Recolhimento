@@ -116,9 +116,12 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
     // `offset` até `hasMore` vir false, em vez de esperar uma função só
     // buscar tudo de uma vez (isso estourava o timeout da Vercel em unidade
     // com histórico grande e a rota inteira caía com 504, sem mostrar nada).
+    // A tabela já aparece com o que já chegou a cada página — sem isso a
+    // tela ficava só no spinner por dezenas de segundos num histórico grande.
     const payments: AsaasBoletoPreview[] = [];
     let offset = 0;
     const MAX_PAGES = 50; // trava de segurança: até 5000 boletos por unidade
+    const sortDesc = () => [...payments].sort((a, b) => (b.dueDate || '').localeCompare(a.dueDate || ''));
     try {
       for (let page = 0; page < MAX_PAGES; page++) {
         const res = await fetch('/api/asaas/list-payments', {
@@ -131,19 +134,18 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
         });
         const data = await res.json().catch(() => ({}) as any);
         if (!res.ok) {
-          setBoletoPreview({ unidade, loading: false, loadedCount: payments.length, payments: null, error: data.error || `Falha ao buscar no ASAAS (HTTP ${res.status}).` });
+          setBoletoPreview({ unidade, loading: false, loadedCount: payments.length, payments: payments.length > 0 ? sortDesc() : null, error: data.error || `Falha ao buscar no ASAAS (HTTP ${res.status}).` });
           return;
         }
         const pageItems = Array.isArray(data.payments) ? data.payments : [];
         payments.push(...pageItems);
-        setBoletoPreview({ unidade, loading: true, loadedCount: payments.length, payments: null, error: null });
+        setBoletoPreview({ unidade, loading: true, loadedCount: payments.length, payments: sortDesc(), error: null });
         if (!data.hasMore) break;
         offset = data.nextOffset ?? offset + pageItems.length;
       }
-      payments.sort((a, b) => (b.dueDate || '').localeCompare(a.dueDate || ''));
-      setBoletoPreview({ unidade, loading: false, loadedCount: payments.length, payments, error: null });
+      setBoletoPreview({ unidade, loading: false, loadedCount: payments.length, payments: sortDesc(), error: null });
     } catch (err: any) {
-      setBoletoPreview({ unidade, loading: false, loadedCount: payments.length, payments: null, error: err?.message || 'Falha de conexão com o servidor.' });
+      setBoletoPreview({ unidade, loading: false, loadedCount: payments.length, payments: payments.length > 0 ? sortDesc() : null, error: err?.message || 'Falha de conexão com o servidor.' });
     }
   };
 
@@ -511,11 +513,12 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                   {boletoPreview.payments && boletoPreview.payments.length > 0 && (
                     <button
                       onClick={handleDownloadBoletosPdf}
-                      disabled={downloadingBoletosPdf}
+                      disabled={downloadingBoletosPdf || boletoPreview.loading}
+                      title={boletoPreview.loading ? 'Espera terminar de carregar pra baixar a lista completa' : undefined}
                       className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
                     >
                       {downloadingBoletosPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-                      <span>{downloadingBoletosPdf ? 'Gerando...' : 'Baixar PDF'}</span>
+                      <span>{downloadingBoletosPdf ? 'Gerando...' : boletoPreview.loading ? 'Carregando...' : 'Baixar PDF'}</span>
                     </button>
                   )}
                   <button
@@ -528,7 +531,9 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
               </div>
 
               <div className="flex-1 overflow-y-auto">
-                {boletoPreview.loading && (
+                {/* Spinner cheio só até a PRIMEIRA página chegar — depois disso a
+                    tabela some abaixo cresce sozinha a cada página nova. */}
+                {boletoPreview.loading && !boletoPreview.payments && (
                   <div className="h-full flex flex-col items-center justify-center gap-3 text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin" />
                     <span className="text-xs font-bold">
@@ -537,14 +542,14 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                   </div>
                 )}
 
-                {!boletoPreview.loading && boletoPreview.error && (
+                {!boletoPreview.loading && boletoPreview.error && !boletoPreview.payments && (
                   <div className="h-full flex flex-col items-center justify-center gap-3 px-6 text-center text-rose-500">
                     <AlertTriangle className="w-6 h-6" />
                     <span className="text-xs font-bold max-w-sm">{boletoPreview.error}</span>
                   </div>
                 )}
 
-                {!boletoPreview.loading && !boletoPreview.error && boletoPreview.payments && (
+                {boletoPreview.payments && (
                   boletoPreview.payments.length === 0 ? (
                     <div className="py-16 text-center text-slate-400 italic text-xs">Nenhum boleto encontrado no ASAAS pra essa unidade.</div>
                   ) : (
@@ -574,11 +579,20 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                     </table>
                   )
                 )}
+
+                {boletoPreview.loading && boletoPreview.payments && boletoPreview.payments.length > 0 && (
+                  <div className="flex items-center justify-center gap-2 py-4 text-slate-400">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Carregando mais...</span>
+                  </div>
+                )}
               </div>
 
-              {!boletoPreview.loading && !boletoPreview.error && boletoPreview.payments && boletoPreview.payments.length > 0 && (
+              {boletoPreview.payments && boletoPreview.payments.length > 0 && (
                 <div className="px-6 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 text-[11px] font-bold text-slate-500 dark:text-slate-400 shrink-0">
-                  {boletoPreview.payments.length} boleto{boletoPreview.payments.length > 1 ? 's' : ''} encontrado{boletoPreview.payments.length > 1 ? 's' : ''} no ASAAS.
+                  {boletoPreview.loading
+                    ? `${boletoPreview.payments.length} boleto${boletoPreview.payments.length > 1 ? 's' : ''} carregado${boletoPreview.payments.length > 1 ? 's' : ''} até agora...`
+                    : `${boletoPreview.payments.length} boleto${boletoPreview.payments.length > 1 ? 's' : ''} encontrado${boletoPreview.payments.length > 1 ? 's' : ''} no ASAAS.`}
                 </div>
               )}
             </motion.div>
