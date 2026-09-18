@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Unidade, BaseCategory } from '../types';
-import { Plus, Trash2, Edit2, Database, Building2, Tags, Save, X, Search, CheckCircle2, Lock } from 'lucide-react';
+import { Plus, Trash2, Edit2, Database, Building2, Tags, Save, X, Search, CheckCircle2, Lock, Eye, Loader2, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface BasesManagerViewProps {
@@ -10,6 +10,7 @@ interface BasesManagerViewProps {
   // (ver App.tsx), então só admin pode criar/editar/excluir uma. Categorias
   // não têm esse dado sensível, continuam liberadas pra qualquer um.
   canEditUnidades: boolean;
+  sessionToken: string | null;
   onAddUnidade: (u: Unidade) => void;
   onUpdateUnidade: (u: Unidade) => void;
   onDeleteUnidade: (id: string) => void;
@@ -18,10 +19,29 @@ interface BasesManagerViewProps {
   onDeleteCategoria: (id: string) => void;
 }
 
+// Boleto cru, como a API do ASAAS devolve (via /api/asaas/list-payments) —
+// dueDate/paymentDate ainda em ISO (yyyy-mm-dd), não no formato BR do resto
+// do Munago, porque isso aqui é só PREVIEW: nada disso vira RecolhimentoItem.
+interface AsaasBoletoPreview {
+  id: string;
+  value: number;
+  dueDate: string;
+  description: string;
+  status: string;
+  paymentDate?: string;
+}
+
+const formatIsoDateBr = (iso?: string) => {
+  if (!iso) return '-';
+  const [y, m, d] = iso.split('-');
+  return d && m && y ? `${d}/${m}/${y}` : iso;
+};
+
 export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
   unidades,
   categorias,
   canEditUnidades,
+  sessionToken,
   onAddUnidade,
   onUpdateUnidade,
   onDeleteUnidade,
@@ -45,6 +65,41 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setToastMsg(message);
     toastTimeoutRef.current = setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  // Preview somente-leitura do histórico ASAAS de uma unidade — pedido
+  // explícito pra poder OLHAR o que tem lá antes de decidir integrar de
+  // verdade (botão "Importar histórico" na tela ASAAS, que aí sim grava
+  // cada boleto como RecolhimentoItem). Nada aqui toca o banco do Munago.
+  const [boletoPreview, setBoletoPreview] = useState<{
+    unidade: Unidade;
+    loading: boolean;
+    payments: AsaasBoletoPreview[] | null;
+    error: string | null;
+  } | null>(null);
+
+  const handleViewBoletos = async (unidade: Unidade) => {
+    setBoletoPreview({ unidade, loading: true, payments: null, error: null });
+    try {
+      const res = await fetch('/api/asaas/list-payments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+        },
+        body: JSON.stringify({ unidadeId: unidade.id, sandbox: false }),
+      });
+      const data = await res.json().catch(() => ({}) as any);
+      if (!res.ok) {
+        setBoletoPreview({ unidade, loading: false, payments: null, error: data.error || `Falha ao buscar no ASAAS (HTTP ${res.status}).` });
+        return;
+      }
+      const payments = Array.isArray(data.payments) ? data.payments : [];
+      payments.sort((a: AsaasBoletoPreview, b: AsaasBoletoPreview) => (b.dueDate || '').localeCompare(a.dueDate || ''));
+      setBoletoPreview({ unidade, loading: false, payments, error: null });
+    } catch (err: any) {
+      setBoletoPreview({ unidade, loading: false, payments: null, error: err?.message || 'Falha de conexão com o servidor.' });
+    }
   };
 
   const handleOpenAdd = () => {
@@ -211,17 +266,30 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                     )}
                     {activeSubTab === 'unidades' && (
                       <td className="py-4 px-6">
-                        {(item as any).hasAsaasKey ? (
-                          <span className="inline-flex items-center space-x-1 text-emerald-600 dark:text-emerald-400 font-bold text-[10px] uppercase tracking-wider">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                            <span>Configurada</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center space-x-1 text-slate-400 font-bold text-[10px] uppercase tracking-wider">
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600"></span>
-                            <span>Pendente</span>
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2.5">
+                          {(item as any).hasAsaasKey ? (
+                            <span className="inline-flex items-center space-x-1 text-emerald-600 dark:text-emerald-400 font-bold text-[10px] uppercase tracking-wider">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              <span>Configurada</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center space-x-1 text-slate-400 font-bold text-[10px] uppercase tracking-wider">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600"></span>
+                              <span>Pendente</span>
+                            </span>
+                          )}
+                          {(item as any).hasAsaasKey && (
+                            <button
+                              type="button"
+                              onClick={() => handleViewBoletos(item as Unidade)}
+                              title="Ver boletos do ASAAS dessa unidade, sem importar nada pro Munago"
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 uppercase tracking-wider"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>Ver boletos</span>
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                     <td className="py-4 px-6 text-right">
@@ -359,6 +427,88 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Preview de boletos ASAAS — somente leitura, nada aqui vira
+          RecolhimentoItem. O botão "Importar histórico" fica na tela de
+          Integração ASAAS, separado de propósito: aqui é só pra decidir. */}
+      <AnimatePresence>
+        {boletoPreview && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-slate-900 w-full max-w-2xl max-h-[85vh] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col"
+            >
+              <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50 shrink-0">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">Boletos ASAAS — {boletoPreview.unidade.nome}</h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Só visualização — nada aqui entra no Munago.</p>
+                </div>
+                <button
+                  onClick={() => setBoletoPreview(null)}
+                  className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="overflow-y-auto">
+                {boletoPreview.loading && (
+                  <div className="flex flex-col items-center justify-center gap-3 py-16 text-slate-400">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span className="text-xs font-bold">Buscando no ASAAS...</span>
+                  </div>
+                )}
+
+                {!boletoPreview.loading && boletoPreview.error && (
+                  <div className="flex flex-col items-center justify-center gap-3 py-16 px-6 text-center text-rose-500">
+                    <AlertTriangle className="w-6 h-6" />
+                    <span className="text-xs font-bold max-w-sm">{boletoPreview.error}</span>
+                  </div>
+                )}
+
+                {!boletoPreview.loading && !boletoPreview.error && boletoPreview.payments && (
+                  boletoPreview.payments.length === 0 ? (
+                    <div className="py-16 text-center text-slate-400 italic text-xs">Nenhum boleto encontrado no ASAAS pra essa unidade.</div>
+                  ) : (
+                    <table className="w-full text-left">
+                      <thead className="sticky top-0 bg-white dark:bg-slate-900">
+                        <tr className="text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
+                          <th className="py-2.5 px-6">Vencimento</th>
+                          <th className="py-2.5 px-4">Descrição</th>
+                          <th className="py-2.5 px-4">Status</th>
+                          <th className="py-2.5 px-4">Pagamento</th>
+                          <th className="py-2.5 px-6 text-right">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 dark:divide-slate-800 text-xs text-slate-700 dark:text-slate-300">
+                        {boletoPreview.payments.map((p) => (
+                          <tr key={p.id}>
+                            <td className="py-3 px-6 font-mono text-slate-500">{formatIsoDateBr(p.dueDate)}</td>
+                            <td className="py-3 px-4 max-w-[220px] truncate" title={p.description}>{p.description || '-'}</td>
+                            <td className="py-3 px-4">{p.status}</td>
+                            <td className="py-3 px-4 font-mono text-slate-500">{formatIsoDateBr(p.paymentDate)}</td>
+                            <td className="py-3 px-6 text-right font-bold text-slate-900 dark:text-white">
+                              {(p.value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )
+                )}
+              </div>
+
+              {!boletoPreview.loading && !boletoPreview.error && boletoPreview.payments && boletoPreview.payments.length > 0 && (
+                <div className="px-6 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 text-[11px] font-bold text-slate-500 dark:text-slate-400 shrink-0">
+                  {boletoPreview.payments.length} boleto{boletoPreview.payments.length > 1 ? 's' : ''} encontrado{boletoPreview.payments.length > 1 ? 's' : ''} no ASAAS.
+                </div>
+              )}
             </motion.div>
           </div>
         )}

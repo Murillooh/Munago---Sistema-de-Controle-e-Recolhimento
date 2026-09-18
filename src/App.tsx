@@ -980,6 +980,7 @@ export default function App() {
                 unidades={unidades}
                 categorias={baseCategories}
                 canEditUnidades={currentUser?.role === 'admin'}
+                sessionToken={sessionToken}
                 onAddUnidade={handleAddUnidade}
                 onUpdateUnidade={handleUpdateUnidade}
                 onDeleteUnidade={handleDeleteUnidade}
