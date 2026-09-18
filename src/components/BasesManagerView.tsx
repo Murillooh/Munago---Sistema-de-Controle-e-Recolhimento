@@ -500,7 +500,7 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white dark:bg-slate-900 w-full max-w-5xl max-h-[90vh] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col"
+              className="bg-white dark:bg-slate-900 w-[96vw] h-[92vh] max-w-none rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col"
             >
               <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50 shrink-0">
                 <div>
@@ -527,9 +527,9 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                 </div>
               </div>
 
-              <div className="overflow-y-auto">
+              <div className="flex-1 overflow-y-auto">
                 {boletoPreview.loading && (
-                  <div className="flex flex-col items-center justify-center gap-3 py-16 text-slate-400">
+                  <div className="h-full flex flex-col items-center justify-center gap-3 text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin" />
                     <span className="text-xs font-bold">
                       {boletoPreview.loadedCount > 0 ? `Buscando no ASAAS... (${boletoPreview.loadedCount} até agora)` : 'Buscando no ASAAS...'}
@@ -538,7 +538,7 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                 )}
 
                 {!boletoPreview.loading && boletoPreview.error && (
-                  <div className="flex flex-col items-center justify-center gap-3 py-16 px-6 text-center text-rose-500">
+                  <div className="h-full flex flex-col items-center justify-center gap-3 px-6 text-center text-rose-500">
                     <AlertTriangle className="w-6 h-6" />
                     <span className="text-xs font-bold max-w-sm">{boletoPreview.error}</span>
                   </div>
