@@ -690,6 +690,23 @@ export default function App() {
     return { imported: newItems.length };
   };
 
+  // Chave estável do "conjunto de unidades com chave ASAAS" — NÃO usar
+  // `unidades` direto como dependência do efeito abaixo. `/api/unidades` é
+  // repollado a cada 15s (efeito acima) e devolve um array NOVO toda vez
+  // (novo objeto do JSON.parse), mesmo com o mesmo conteúdo; como array é
+  // comparado por referência, isso reiniciava o efeito de import a cada 15s
+  // — cancelando (`cancelledRef.current = true`) qualquer import ainda
+  // paginando no meio, ANTES de terminar e gravar. Unidade com histórico
+  // grande (milhares de boletos, minutos pra paginar tudo) nunca tinha 15s
+  // de sobra e nunca chegava a importar nada, mesmo o ciclo "automático"
+  // rodando sem parar. Essa chave só muda quando o CONJUNTO de ids com
+  // chave muda de verdade, não a cada poll.
+  const unidadesComChaveKey = unidades
+    .filter((u: any) => u.hasAsaasKey)
+    .map((u: any) => u.id)
+    .sort()
+    .join(',');
+
   useEffect(() => {
     if (!isAuthenticated) return;
     const cancelledRef = { current: false };
@@ -701,7 +718,7 @@ export default function App() {
       clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, unidades]);
+  }, [isAuthenticated, unidadesComChaveKey]);
 
   // Modal de confirmação genérico (substitui confirm() nativo) — quem quiser
   // confirmar algo só passa a mensagem e o que fazer se o usuário confirmar.
