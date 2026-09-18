@@ -637,6 +637,10 @@ export default function App() {
   // nada, então nunca cancela sozinho.
   const runAsaasImport = async (cancelledRef?: { current: boolean }): Promise<{ imported: number }> => {
     const unidadesComChave = unidades.filter((u: any) => u.hasAsaasKey);
+    // Log temporário pra diagnosticar "não importa nada" sem precisar
+    // adivinhar — antes o catch abaixo engolia qualquer erro sem rastro
+    // nenhum, impossível saber remotamente onde tava travando.
+    console.log('[ASAAS import] ciclo iniciado —', unidadesComChave.length, 'unidade(s) com chave:', unidadesComChave.map((u: any) => u.nome));
     if (unidadesComChave.length === 0) return { imported: 0 };
 
     // Acumula tudo e manda num POST em lote só no final, em vez de um
@@ -666,27 +670,38 @@ export default function App() {
             headers: itemsAuthHeaders(),
             body: JSON.stringify({ unidadeId: unidade.id, sandbox: false, offset }),
           });
-          if (!res.ok) break;
+          if (!res.ok) {
+            console.warn('[ASAAS import]', unidade.nome, '— HTTP', res.status, 'na página offset', offset, await res.text().catch(() => ''));
+            break;
+          }
           const data = await res.json();
           const pageItems = Array.isArray(data.payments) ? data.payments : [];
           payments.push(...pageItems);
+          console.log('[ASAAS import]', unidade.nome, '— offset', offset, ':', pageItems.length, 'itens, hasMore:', data.hasMore);
           if (!data.hasMore) break;
           offset = data.nextOffset ?? offset + pageItems.length;
         }
 
+        console.log('[ASAAS import]', unidade.nome, '—', payments.length, 'boleto(s) no total,', existingAsaasIds.size, 'já conhecido(s) até agora');
         for (const p of payments) {
           if (existingAsaasIds.has(p.id)) continue;
           newItems.push(mapAsaasPaymentToItem(unidade, p));
           existingAsaasIds.add(p.id);
         }
-      } catch {
+      } catch (err) {
         // Chave com problema momentâneo ou API fora do ar — tenta de novo no próximo ciclo.
+        console.error('[ASAAS import]', unidade.nome, '— falhou:', err);
       }
     }
 
+    console.log('[ASAAS import] ciclo terminado —', newItems.length, 'novo(s) item(ns) pra gravar');
     if (cancelledRef?.current || newItems.length === 0) return { imported: 0 };
     const result = await handleImportBulk(newItems);
-    if (result.ok === false) throw new Error(result.error);
+    if (result.ok === false) {
+      console.error('[ASAAS import] handleImportBulk falhou:', result.error);
+      throw new Error(result.error);
+    }
+    console.log('[ASAAS import] gravado com sucesso —', newItems.length, 'item(ns)');
     return { imported: newItems.length };
   };
 
