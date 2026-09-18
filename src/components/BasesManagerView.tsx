@@ -456,7 +456,7 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white dark:bg-slate-900 w-full max-w-2xl max-h-[85vh] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col"
+              className="bg-white dark:bg-slate-900 w-full max-w-5xl max-h-[90vh] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col"
             >
               <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50 shrink-0">
                 <div>
@@ -506,7 +506,7 @@ export const BasesManagerView: React.FC<BasesManagerViewProps> = ({
                         {boletoPreview.payments.map((p) => (
                           <tr key={p.id}>
                             <td className="py-3 px-6 font-mono text-slate-500">{formatIsoDateBr(p.dueDate)}</td>
-                            <td className="py-3 px-4 max-w-[220px] truncate" title={p.description}>{p.description || '-'}</td>
+                            <td className="py-3 px-4 max-w-[420px] truncate" title={p.description}>{p.description || '-'}</td>
                             <td className="py-3 px-4">{p.status}</td>
                             <td className="py-3 px-4 font-mono text-slate-500">{formatIsoDateBr(p.paymentDate)}</td>
                             <td className="py-3 px-6 text-right font-bold text-slate-900 dark:text-white">
