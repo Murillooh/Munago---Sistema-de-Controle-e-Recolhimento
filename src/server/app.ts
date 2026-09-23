@@ -185,7 +185,7 @@ export async function createApp() {
   // (admin only).
   app.put('/api/admin/users/:id', requireAdmin, async (req, res) => {
     try {
-      const { status, role, allowedTabs } = req.body || {};
+      const { status, role, allowedTabs, allowedAsaasBases } = req.body || {};
       const validStatus = ['pending', 'approved', 'rejected'];
       const validRole = ['admin', 'user'];
       if (status && !validStatus.includes(status)) return res.status(400).json({ error: 'Status inválido.' });
@@ -203,13 +203,34 @@ export async function createApp() {
         }
       }
 
+      let allowedAsaasBasesJson: string | null | undefined;
+      if (allowedAsaasBases !== undefined) {
+        if (allowedAsaasBases === null) {
+          allowedAsaasBasesJson = null; // libera acesso a todas as bases
+        } else {
+          if (!Array.isArray(allowedAsaasBases) || allowedAsaasBases.some((t: any) => typeof t !== 'string')) {
+            return res.status(400).json({ error: 'Lista de bases inválida.' });
+          }
+          allowedAsaasBasesJson = JSON.stringify(allowedAsaasBases);
+        }
+      }
+
       const result = await pool!.query(
         `UPDATE users SET
            status = COALESCE($1, status),
            role = COALESCE($2, role),
-           allowed_tabs = CASE WHEN $3::boolean THEN $4::jsonb ELSE allowed_tabs END
-         WHERE id = $5 RETURNING *`,
-        [status || null, role || null, allowedTabsJson !== undefined, allowedTabsJson ?? null, req.params.id]
+           allowed_tabs = CASE WHEN $3::boolean THEN $4::jsonb ELSE allowed_tabs END,
+           allowed_asaas_bases = CASE WHEN $5::boolean THEN $6::jsonb ELSE allowed_asaas_bases END
+         WHERE id = $7 RETURNING *`,
+        [
+          status || null, 
+          role || null, 
+          allowedTabsJson !== undefined, 
+          allowedTabsJson ?? null, 
+          allowedAsaasBasesJson !== undefined,
+          allowedAsaasBasesJson ?? null,
+          req.params.id
+        ]
       );
       if (result.rows.length === 0) return res.status(404).json({ error: 'Usuário não encontrado.' });
       res.json(rowToUser(result.rows[0]));
@@ -274,17 +295,17 @@ export async function createApp() {
   // lançamento de outra, mesmo sabendo o id.
   app.get('/api/items', requireDb, requireAuth, async (req, res) => {
     try {
-      const ownerId = (req as any).authUser.id;
-      // data_criacao é TEXT em "DD/MM/AAAA" — ORDER BY ... DESC direto nessa
-      // coluna ordena por TEXTO (dia primeiro), não por data de verdade. Ex:
-      // "05/09/2026" vinha ANTES de "20/08/2026" porque "0" < "2", mesmo
-      // sendo mais recente. TO_DATE resolve a ordem cronológica de verdade;
-      // linha com data vazia/inválida (não bate o regex) some pro fim.
+      const authUser = (req as any).authUser;
+      const ownerId = authUser.id;
+      const isAdminOrNoRestriction = authUser.role === 'admin' || authUser.allowed_asaas_bases == null;
+      const allowedAsaasBases = authUser.allowed_asaas_bases || [];
+
       const result = await pool!.query(
-        `SELECT * FROM recolhimentos WHERE owner_id = $1
+        `SELECT * FROM recolhimentos 
+         WHERE owner_id = $1 OR (owner_id = 'ASAAS_SYSTEM' AND ($2::boolean OR franquia IN (SELECT nome FROM unidades WHERE id = ANY($3::text[]))))
          ORDER BY CASE WHEN data_criacao ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
                         THEN TO_DATE(data_criacao, 'DD/MM/YYYY') END DESC NULLS LAST`,
-        [ownerId]
+        [ownerId, isAdminOrNoRestriction, allowedAsaasBases]
       );
       // Log temporário — diagnosticar "não importa mais nada do ASAAS" sem
       // tocar em credencial nenhuma: só conta o que já tá gravado de fato.
@@ -313,31 +334,34 @@ export async function createApp() {
       vencimento_original = $7, data_pagamento = $8, valor = $9, status = $10,
       competencia_recolhimento = $11, competencia_pagamento = $12, descricao = $13,
       categoria = $14, asaas_id = $15, asaas_invoice_url = $16
-    WHERE id = $1 AND owner_id = $17
+    WHERE id = $1 AND (owner_id = $17 OR (owner_id = 'ASAAS_SYSTEM' AND ($18::boolean OR franquia IN (SELECT nome FROM unidades WHERE id = ANY($19::text[])))))
     RETURNING *;
   `;
   // owner_id sempre vem da sessão autenticada, nunca do corpo da requisição —
   // senão bastaria mandar outro id no payload pra "adotar" lançamento alheio.
-  const itemToParams = (item: any, ownerId: string) => [
-    item.id,
-    item.franquia || '',
-    item.cnpj || '',
-    item.cCusto || '',
-    item.dataCriacao || '',
-    item.vencimento || '',
-    item.vencimentoOriginal || '',
-    item.dataPagamento || '',
-    Number(item.valor) || 0,
-    item.status || 'Aguardando pagamento',
-    item.competenciaRecolhimento || '',
-    item.competenciaPagamento || '',
-    item.descricao || '',
-    item.categoria || null,
-    item.asaasId || null,
-    item.asaasInvoiceUrl || null,
-    ownerId,
-    item.asaasImportedAt || null,
-  ];
+  const itemToParams = (item: any, ownerId: string) => {
+    const isAsaas = !!item.asaasId;
+    return [
+      item.id,
+      item.franquia || '',
+      item.cnpj || '',
+      item.cCusto || '',
+      item.dataCriacao || '',
+      item.vencimento || '',
+      item.vencimentoOriginal || '',
+      item.dataPagamento || '',
+      Number(item.valor) || 0,
+      item.status || 'Aguardando pagamento',
+      item.competenciaRecolhimento || '',
+      item.competenciaPagamento || '',
+      item.descricao || '',
+      item.categoria || null,
+      item.asaasId || null,
+      item.asaasInvoiceUrl || null,
+      isAsaas ? 'ASAAS_SYSTEM' : ownerId,
+      item.asaasImportedAt || null,
+    ];
+  };
 
   app.post('/api/items', requireDb, requireAuth, async (req, res) => {
     try {
@@ -411,11 +435,18 @@ export async function createApp() {
 
   app.put('/api/items/:id', requireDb, requireAuth, async (req, res) => {
     try {
-      const ownerId = (req as any).authUser.id;
+      const authUser = (req as any).authUser;
+      const ownerId = authUser.id;
+      const isAdminOrNoRestriction = authUser.role === 'admin' || authUser.allowed_asaas_bases == null;
+      const allowedAsaasBases = authUser.allowed_asaas_bases || [];
+
       const params = itemToParams({ ...req.body, id: req.params.id }, ownerId);
+      params.push(isAdminOrNoRestriction);
+      params.push(allowedAsaasBases);
+      
       const result = await pool!.query(updateItemQuery, params);
       if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Lançamento não encontrado.' });
+        return res.status(404).json({ error: 'Lançamento não encontrado ou sem permissão.' });
       }
       res.json(rowToItem(result.rows[0]));
     } catch (err: any) {
@@ -425,8 +456,16 @@ export async function createApp() {
 
   app.delete('/api/items/:id', requireDb, requireAuth, async (req, res) => {
     try {
-      const ownerId = (req as any).authUser.id;
-      await pool!.query('DELETE FROM recolhimentos WHERE id = $1 AND owner_id = $2', [req.params.id, ownerId]);
+      const authUser = (req as any).authUser;
+      const ownerId = authUser.id;
+      const isAdminOrNoRestriction = authUser.role === 'admin' || authUser.allowed_asaas_bases == null;
+      const allowedAsaasBases = authUser.allowed_asaas_bases || [];
+
+      await pool!.query(
+        `DELETE FROM recolhimentos 
+         WHERE id = $1 AND (owner_id = $2 OR (owner_id = 'ASAAS_SYSTEM' AND ($3::boolean OR franquia IN (SELECT nome FROM unidades WHERE id = ANY($4::text[])))))`, 
+        [req.params.id, ownerId, isAdminOrNoRestriction, allowedAsaasBases]
+      );
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao excluir lançamento.', details: err.message });

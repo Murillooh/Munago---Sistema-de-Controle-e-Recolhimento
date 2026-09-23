@@ -645,7 +645,11 @@ export default function App() {
   // dele (unmount cancela o ciclo em andamento); o botão manual não passa
   // nada, então nunca cancela sozinho.
   const runAsaasImport = async (cancelledRef?: { current: boolean }): Promise<{ imported: number }> => {
-    const unidadesComChave = unidades.filter((u: any) => u.hasAsaasKey);
+    const unidadesComChave = unidades.filter((u: any) => {
+      if (!u.hasAsaasKey) return false;
+      if (currentUser?.role === 'admin' || currentUser?.allowedAsaasBases === null) return true;
+      return currentUser?.allowedAsaasBases?.includes(u.id);
+    });
     // Log temporário pra diagnosticar "não importa nada" sem precisar
     // adivinhar — antes o catch abaixo engolia qualquer erro sem rastro
     // nenhum, impossível saber remotamente onde tava travando.
@@ -1086,7 +1090,7 @@ export default function App() {
               <AsaasIntegrationView items={items} unidades={unidades} sessionToken={sessionToken} onUpdateItem={handleUpdateItem} onAddItem={handleAddItem} onImportAsaasHistory={runAsaasImport} />
             )}
             {activeTab === 'usuarios' && currentUser?.role === 'admin' && (
-              <AdminUsersView sessionToken={sessionToken} currentUserId={currentUser.id} />
+              <AdminUsersView sessionToken={sessionToken} currentUserId={currentUser.id} unidades={unidades} />
             )}
             {activeTab === 'estoque' && canAccessTab(currentUser, 'estoque') && (
               <EstoqueView

@@ -87,6 +87,9 @@ export interface AuthUser {
   // nunca teve permissão restringida). Array = lista explícita de abas
   // liberadas pro usuário — ver PERMISSION_TABS e canAccessTab().
   allowedTabs?: ActiveTab[] | null;
+  // null/undefined = acesso a boletos do ASAAS de todas as bases.
+  // Array = lista de nomes/ids de bases cujos boletos o usuário pode ver.
+  allowedAsaasBases?: string[] | null;
 }
 
 export interface Unidade {

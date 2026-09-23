@@ -137,6 +137,7 @@ export interface UserRow {
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
   allowed_tabs: string[] | null;
+  allowed_asaas_bases?: string[] | null;
 }
 
 // Nunca inclui password_hash — essa função é o que qualquer resposta HTTP devolve.
@@ -149,6 +150,7 @@ export function rowToUser(row: UserRow) {
     status: row.status,
     createdAt: row.created_at,
     allowedTabs: row.allowed_tabs ?? null,
+    allowedAsaasBases: row.allowed_asaas_bases ?? null,
   };
 }
 
@@ -232,12 +234,18 @@ export function initDb(): Promise<void> {
       -- total). Admin nunca é restringido por isso (ver canAccessTab no
       -- front) — o campo só é lido/gravado pra usuários comuns.
       ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_tabs JSONB;
+      -- Lista de bases (franquias) cujos boletos ASAAS o usuário pode ver.
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_asaas_bases JSONB;
 
       CREATE TABLE IF NOT EXISTS sessions (
         token TEXT PRIMARY KEY,
         user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
+
+      -- Atualiza todos os boletos do ASAAS já importados para não terem um dono específico
+      -- Isso permite que sejam compartilhados via a permissão allowed_asaas_bases.
+      UPDATE recolhimentos SET owner_id = 'ASAAS_SYSTEM' WHERE asaas_id IS NOT NULL AND owner_id != 'ASAAS_SYSTEM';
 
       -- Assinatura de Push Web (Service Worker) por usuário/dispositivo. É o
       -- que permite mandar notificação de alerta de prazo pro Windows mesmo

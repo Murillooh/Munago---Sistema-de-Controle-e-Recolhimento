@@ -18,9 +18,10 @@ import { ConfirmDialog } from './ConfirmDialog';
 interface AdminUsersViewProps {
   sessionToken: string | null;
   currentUserId: string;
+  unidades: any[];
 }
 
-export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ sessionToken, currentUserId }) => {
+export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ sessionToken, currentUserId, unidades }) => {
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -31,6 +32,8 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ sessionToken, cu
   const [permTarget, setPermTarget] = useState<AuthUser | null>(null);
   const [permFullAccess, setPermFullAccess] = useState(true);
   const [permSelection, setPermSelection] = useState<Set<ActiveTab>>(new Set());
+  const [permAsaasFullAccess, setPermAsaasFullAccess] = useState(true);
+  const [permAsaasSelection, setPermAsaasSelection] = useState<Set<string>>(new Set());
 
   const authHeaders = {
     'Content-Type': 'application/json',
@@ -60,7 +63,7 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ sessionToken, cu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const updateUser = async (id: string, patch: { status?: string; role?: string; allowedTabs?: ActiveTab[] | null }) => {
+  const updateUser = async (id: string, patch: { status?: string; role?: string; allowedTabs?: ActiveTab[] | null; allowedAsaasBases?: string[] | null }) => {
     setBusyId(id);
     try {
       const res = await fetch(`/api/admin/users/${id}`, {
@@ -127,6 +130,8 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ sessionToken, cu
     setPermTarget(user);
     setPermFullAccess(!user.allowedTabs);
     setPermSelection(new Set(user.allowedTabs || PERMISSION_TABS.map((t) => t.id)));
+    setPermAsaasFullAccess(!user.allowedAsaasBases);
+    setPermAsaasSelection(new Set(user.allowedAsaasBases || unidades.map((u) => u.id)));
   };
 
   const togglePermTab = (tab: ActiveTab) => {
@@ -138,9 +143,21 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ sessionToken, cu
     });
   };
 
+  const togglePermAsaasBase = (baseId: string) => {
+    setPermAsaasSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(baseId)) next.delete(baseId);
+      else next.add(baseId);
+      return next;
+    });
+  };
+
   const savePermissions = async () => {
     if (!permTarget) return;
-    await updateUser(permTarget.id, { allowedTabs: permFullAccess ? null : Array.from(permSelection) });
+    await updateUser(permTarget.id, { 
+      allowedTabs: permFullAccess ? null : Array.from(permSelection),
+      allowedAsaasBases: permAsaasFullAccess ? null : Array.from(permAsaasSelection)
+    });
     setPermTarget(null);
   };
 
@@ -475,7 +492,7 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ sessionToken, cu
                     {permFullAccess ? PERMISSION_TABS.length : permSelection.size}/{PERMISSION_TABS.length}
                   </p>
                 </div>
-                <div className={`space-y-1 max-h-64 overflow-y-auto pr-1 transition-opacity ${permFullAccess ? 'opacity-40 pointer-events-none' : ''}`}>
+                <div className={`space-y-1 max-h-40 overflow-y-auto pr-1 transition-opacity ${permFullAccess ? 'opacity-40 pointer-events-none' : ''}`}>
                   {PERMISSION_TABS.map((tab) => {
                     const Icon = PERMISSION_TAB_ICONS[tab.id] || SlidersHorizontal;
                     const checked = permFullAccess || permSelection.has(tab.id);
@@ -496,6 +513,69 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ sessionToken, cu
                           type="checkbox"
                           checked={checked}
                           onChange={() => togglePermTab(tab.id)}
+                          className="sr-only"
+                        />
+                        <span
+                          className={`w-4 h-4 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors ${
+                            checked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 dark:border-slate-600'
+                          }`}
+                        >
+                          {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="border-t border-slate-200 dark:border-slate-700/50 my-2" />
+
+              <label className="flex items-center justify-between gap-3 p-3.5 bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/40 dark:to-slate-800/60 border border-indigo-100 dark:border-indigo-900/40 rounded-xl cursor-pointer transition-colors hover:border-indigo-200 dark:hover:border-indigo-800">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="p-2 bg-indigo-600 text-white rounded-lg shrink-0">
+                    <Database className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-100">Todas as bases ASAAS</p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">Libera acesso a boletos de todas as bases.</p>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={permAsaasFullAccess}
+                  onChange={(e) => setPermAsaasFullAccess(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 shrink-0 bg-slate-300 dark:bg-slate-700 peer-checked:bg-indigo-600 rounded-full relative transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:bg-white after:rounded-full after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
+              </label>
+
+              <div>
+                <div className="flex items-center justify-between px-1 mb-1.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Bases liberadas</p>
+                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 tabular-nums">
+                    {permAsaasFullAccess ? unidades.length : permAsaasSelection.size}/{unidades.length}
+                  </p>
+                </div>
+                <div className={`space-y-1 max-h-40 overflow-y-auto pr-1 transition-opacity ${permAsaasFullAccess ? 'opacity-40 pointer-events-none' : ''}`}>
+                  {unidades.map((unidade) => {
+                    const checked = permAsaasFullAccess || permAsaasSelection.has(unidade.id);
+                    return (
+                      <label
+                        key={unidade.id}
+                        className={`flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+                          checked
+                            ? 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-100 dark:border-indigo-900/40'
+                            : 'bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 dark:hover:border-slate-700'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          <Database className={`w-4 h-4 ${checked ? 'text-indigo-500' : 'text-slate-400 dark:text-slate-500'}`} />
+                          {unidade.nome}
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => togglePermAsaasBase(unidade.id)}
                           className="sr-only"
                         />
                         <span
