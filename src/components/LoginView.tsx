@@ -36,7 +36,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [infoMsg, setInfoMsg] = useState('');
@@ -59,6 +61,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
     try {
       if (mode === 'register') {
+        if (password !== confirmPassword) {
+          setErrorMsg('As senhas não coincidem.');
+          setLoading(false);
+          return;
+        }
+
         const res = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -173,18 +181,20 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       </div>
 
       {/* ----------------- LADO DIREITO (FORMULÁRIO ESTRUTURADO) ----------------- */}
-      <div className="relative flex-1 flex flex-col items-center justify-center p-6 sm:p-12 bg-[#050505]">
+      <div className="relative flex-1 flex flex-col items-center justify-center p-6 sm:p-12 bg-[#050505] overflow-hidden">
         
-        {/* Glow sutil atrás do formulário */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-500/10 blur-[120px] rounded-full pointer-events-none" />
+        {/* Elementos coloridos no fundo para dar vida ao efeito de ESPELHO / VIDRO */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#d4a017]/15 blur-[120px] rounded-full mix-blend-screen pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-blue-600/10 blur-[150px] rounded-full mix-blend-screen pointer-events-none" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-white/5 blur-[100px] rounded-full pointer-events-none" />
 
         <motion.div 
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1] }}
-          className="w-full max-w-[420px] relative z-10 bg-white/[0.02] backdrop-blur-2xl border border-white/[0.05] p-8 sm:p-10 rounded-3xl shadow-2xl shadow-black/50"
+          className="w-full max-w-[420px] relative z-10 p-8 sm:p-10 rounded-3xl bg-white/[0.04] backdrop-blur-[40px] border border-white/[0.08] shadow-[0_8px_32px_0_rgba(0,0,0,0.5)]"
         >
-          {/* Logo Centralizado (Desktop e Mobile) */}
+          {/* Logo Centralizado */}
           <div className="flex flex-col items-center gap-4 mb-8">
             <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-[#f2ca5c] to-[#a3760a] shadow-lg shadow-amber-500/20 text-[#030305]">
               <Building2 className="w-7 h-7" />
@@ -197,12 +207,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
           <div className="mb-8 text-center">
             <h3 className="text-xl font-semibold text-zinc-100 mb-1.5 tracking-tight">
-              {mode === 'login' ? 'Bem-vindo de volta' : 'Criar nova conta'}
+              {mode === 'login' ? 'Acesso Restrito' : 'Criar nova conta'}
             </h3>
             <p className="text-[13px] text-zinc-400">
               {mode === 'login' 
-                ? 'Insira suas credenciais corporativas abaixo.'
-                : 'Preencha os dados corporativos solicitados.'}
+                ? 'Insira suas credenciais para entrar.'
+                : 'Preencha seus dados para começar.'}
             </p>
           </div>
 
@@ -211,11 +221,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               {errorMsg && (
                 <motion.div 
                   initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-                  animate={{ opacity: 1, height: 'auto', marginBottom: 16 }}
+                  animate={{ opacity: 1, height: 'auto', marginBottom: 20 }}
                   exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                   className="overflow-hidden"
                 >
-                  <div className="text-[12px] font-medium text-red-400 bg-red-950/30 border border-red-900/50 rounded-lg px-3 py-2.5 flex items-center gap-2">
+                  <div className="text-[13px] font-medium text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 flex items-center gap-2.5">
                     <ShieldCheck className="w-4 h-4 shrink-0" />
                     <span>{errorMsg}</span>
                   </div>
@@ -224,11 +234,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               {infoMsg && (
                 <motion.div 
                   initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-                  animate={{ opacity: 1, height: 'auto', marginBottom: 16 }}
+                  animate={{ opacity: 1, height: 'auto', marginBottom: 20 }}
                   exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                   className="overflow-hidden"
                 >
-                  <div className="text-[12px] font-medium text-emerald-400 bg-emerald-950/30 border border-emerald-900/50 rounded-lg px-3 py-2.5 flex items-center gap-2">
+                  <div className="text-[13px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-3 flex items-center gap-2.5">
                     <CheckCircle2 className="w-4 h-4 shrink-0" />
                     <span>{infoMsg}</span>
                   </div>
@@ -238,14 +248,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
             {mode === 'register' && (
               <div className="space-y-1.5">
-                <label className="block text-[12px] font-medium text-zinc-300">Nome Completo</label>
+                <label className="block text-[13px] font-medium text-zinc-300">Nome Completo</label>
                 <div className="relative">
                   <input 
                     required 
                     type="text" 
                     value={name} 
                     onChange={e => setName(e.target.value)} 
-                    className="login-input w-full h-11 rounded-lg bg-zinc-900/50 border border-zinc-800 px-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 focus:bg-zinc-900 focus:ring-1 focus:ring-zinc-500 transition-all" 
+                    className="w-full h-12 rounded-xl bg-black/20 border border-white/10 px-4 text-[14px] text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-[#d4a017] focus:bg-black/40 focus:ring-1 focus:ring-[#d4a017] transition-all" 
                     placeholder="Seu nome" 
                   />
                 </div>
@@ -253,14 +263,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             )}
 
             <div className="space-y-1.5">
-              <label className="block text-[12px] font-medium text-zinc-300">E-mail</label>
+              <label className="block text-[13px] font-medium text-zinc-300">E-mail corporativo</label>
               <div className="relative">
                 <input 
                   required 
                   type="email" 
                   value={email} 
                   onChange={e => setEmail(e.target.value)} 
-                  className="login-input w-full h-11 rounded-lg bg-zinc-900/50 border border-zinc-800 px-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 focus:bg-zinc-900 focus:ring-1 focus:ring-zinc-500 transition-all" 
+                  className="w-full h-12 rounded-xl bg-black/20 border border-white/10 px-4 text-[14px] text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-[#d4a017] focus:bg-black/40 focus:ring-1 focus:ring-[#d4a017] transition-all" 
                   placeholder="nome@empresa.com" 
                 />
               </div>
@@ -268,9 +278,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
             <div className="space-y-1.5">
               <div className="flex justify-between items-baseline">
-                <label className="block text-[12px] font-medium text-zinc-300">Senha</label>
+                <label className="block text-[13px] font-medium text-zinc-300">Senha</label>
                 {mode === 'login' && (
-                  <button type="button" className="text-[11px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors">
+                  <button type="button" className="text-[12px] font-medium text-[#d4a017] hover:text-[#f2ca5c] transition-colors">
                     Esqueceu a senha?
                   </button>
                 )}
@@ -282,30 +292,55 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="login-input w-full h-11 rounded-lg bg-zinc-900/50 border border-zinc-800 pl-3 pr-10 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 focus:bg-zinc-900 focus:ring-1 focus:ring-zinc-500 transition-all"
+                  className="w-full h-12 rounded-xl bg-black/20 border border-white/10 pl-4 pr-11 text-[14px] text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-[#d4a017] focus:bg-black/40 focus:ring-1 focus:ring-[#d4a017] transition-all"
                   placeholder="••••••••"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
                   tabIndex={-1}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 transition-colors"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-colors"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+              
+              {mode === 'register' && (
+                <div className="pt-2 space-y-1.5">
+                  <label className="block text-[13px] font-medium text-zinc-300">Confirmar Senha</label>
+                  <div className="relative">
+                    <input
+                      required
+                      minLength={6}
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                      className="w-full h-12 rounded-xl bg-black/20 border border-white/10 pl-4 pr-11 text-[14px] text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-[#d4a017] focus:bg-black/40 focus:ring-1 focus:ring-[#d4a017] transition-all"
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((v) => !v)}
+                      tabIndex={-1}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-colors"
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-            
-            <div className="pt-4 space-y-5">
+
+            <div className="pt-4 space-y-6">
               <button 
                 type="submit" 
                 disabled={loading} 
-                className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex items-center justify-center gap-2 font-bold text-[13px] tracking-wide disabled:opacity-50 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-500/25 transition-all active:scale-[0.98]"
+                className="w-full h-12 rounded-xl bg-gradient-to-r from-[#d4a017] to-[#a3760a] text-white flex items-center justify-center gap-2 font-bold text-[14px] tracking-wide disabled:opacity-50 hover:from-[#f2ca5c] hover:to-[#d4a017] shadow-lg shadow-amber-500/20 transition-all active:scale-[0.98]"
               >
                 {loading ? (
                   <span className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                    {mode === 'register' ? 'Criando...' : 'Autenticando...'}
+                    {mode === 'register' ? 'Criando Conta...' : 'Autenticando...'}
                   </span>
                 ) : (
                   <>
@@ -315,18 +350,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 )}
               </button>
 
-              <div className="relative flex items-center py-2">
-                <div className="flex-grow border-t border-zinc-800"></div>
-                <span className="flex-shrink-0 mx-4 text-zinc-600 text-[10px] uppercase tracking-wider font-semibold">Suporte</span>
-                <div className="flex-grow border-t border-zinc-800"></div>
-              </div>
-
-              <div className="flex items-center justify-center gap-1.5 text-[12px] text-zinc-400">
+              <div className="flex items-center justify-center gap-1.5 text-[13px] text-zinc-400">
                 <span>{mode === 'login' ? 'Ainda não tem acesso?' : 'Já possui conta?'}</span>
                 <button
                   type="button"
                   onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setErrorMsg(''); setInfoMsg(''); }}
-                  className="text-white hover:text-blue-400 font-semibold transition-colors"
+                  className="text-white hover:text-zinc-200 font-semibold transition-colors drop-shadow-sm"
                 >
                   {mode === 'login' ? 'Solicite uma conta' : 'Fazer login'}
                 </button>
