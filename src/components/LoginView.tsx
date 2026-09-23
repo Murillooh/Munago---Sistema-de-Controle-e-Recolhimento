@@ -1,10 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, Mail, ArrowRight, ShieldCheck, Eye, EyeOff } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Eye, EyeOff, Building2, CheckCircle2, Cpu, Globe2, LineChart } from 'lucide-react';
 import { AuthUser } from '../types';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface LoginViewProps {
   onLoginSuccess: (user: AuthUser, token: string | null) => void;
 }
+
+const slides = [
+  {
+    id: 0,
+    icon: <Globe2 className="w-5 h-5 text-zinc-300" />,
+    title: "Gestão inteligente.",
+    highlight: "Resultados excepcionais.",
+    desc: "Centralize o controle de recolhimentos e otimize processos com nossa plataforma de gestão integrada em tempo real."
+  },
+  {
+    id: 1,
+    icon: <LineChart className="w-5 h-5 text-zinc-300" />,
+    title: "Precisão absoluta.",
+    highlight: "Visão estratégica.",
+    desc: "Acompanhe indicadores-chave, métricas automatizadas e tome decisões seguras baseadas em dados consolidados."
+  },
+  {
+    id: 2,
+    icon: <Cpu className="w-5 h-5 text-zinc-300" />,
+    title: "Controle instantâneo.",
+    highlight: "Alta performance.",
+    desc: "Interface ultrarrápida e resiliente para garantir que sua operação e conciliações não tenham pausas."
+  }
+];
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -15,6 +40,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [infoMsg, setInfoMsg] = useState('');
+
+  // Lógica do Carrossel
+  const [currentSlide, setCurrentSlide] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % slides.length);
+    }, 6000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,7 +70,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           return;
         }
         if (data.user?.status === 'approved') {
-          // Primeiro usuário do sistema: já entra direto como admin.
           setMode('login');
           setInfoMsg('Conta criada como administrador! Faça login para entrar.');
         } else {
@@ -53,7 +87,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       });
 
       if (res.status === 503) {
-        // Banco ainda não configurado: mantém o acesso local de sempre, sem travar o sistema.
         onLoginSuccess({ id: 'local', name: 'Murillo Silva', email, role: 'admin', status: 'approved' }, null);
         return;
       }
@@ -71,177 +104,238 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  useEffect(() => {
-    // Canvas animation logic
-    const canvas = document.getElementById('stars') as HTMLCanvasElement;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d')!;
-    const DPR = Math.min(window.devicePixelRatio || 1, 2);
-    let W = window.innerWidth;
-    let H = window.innerHeight;
-    let stars: any[] = [];
-    let shooters: any[] = [];
-    let lastShot = 0;
-    let nextShotDelay = 2000;
-
-    function rand(a: number, b: number) { return a + Math.random() * (b - a); }
-
-    function resize() {
-      W = window.innerWidth;
-      H = window.innerHeight;
-      canvas.width = W * DPR;
-      canvas.height = H * DPR;
-      canvas.style.width = W + 'px';
-      canvas.style.height = H + 'px';
-      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-      stars = [];
-      const count = Math.max(70, Math.min(220, Math.round((W * H) / 5200)));
-      for (let i = 0; i < count; i++) {
-        stars.push({
-          x: Math.random() * W,
-          y: Math.pow(Math.random(), 1.35) * H,
-          r: rand(0.5, 1.6),
-          base: rand(0.25, 0.85),
-          amp: rand(0.15, 0.45),
-          speed: rand(0.4, 1.4),
-          phase: rand(0, Math.PI * 2),
-          drift: rand(-1.5, 1.5)
-        });
-      }
-    }
-
-    function frame(t: number) {
-      ctx.clearRect(0, 0, W, H);
-      stars.forEach(s => {
-        const tw = Math.max(0, Math.min(1, s.base + s.amp * Math.sin(t * 0.001 * s.speed + s.phase)));
-        ctx.fillStyle = `rgba(255,250,238,${tw})`;
-        ctx.beginPath();
-        ctx.arc(s.x + Math.sin(t * 0.00012 + s.phase) * s.drift * 6, s.y, s.r, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      if (t - lastShot > nextShotDelay) {
-        shooters.push({
-          x: rand(W * 0.05, W * 0.75), y: rand(H * 0.02, H * 0.28),
-          vx: Math.cos(rand(18, 32) * Math.PI / 180) * rand(9, 14),
-          vy: Math.sin(rand(18, 32) * Math.PI / 180) * rand(9, 14),
-          life: 0, maxLife: rand(38, 58), len: rand(70, 130)
-        });
-        lastShot = t;
-        nextShotDelay = rand(2600, 5200);
-      }
-
-      shooters.forEach((sh, i) => {
-        sh.x += sh.vx; sh.y += sh.vy; sh.life++;
-        const p = sh.life / sh.maxLife;
-        const fade = Math.max(0, Math.min(1, p < 0.15 ? p / 0.15 : (1 - (p - 0.15) / 0.85)));
-        ctx.strokeStyle = `rgba(59,130,246,${0.5 * fade})`;
-        ctx.beginPath();
-        ctx.moveTo(sh.x, sh.y);
-        ctx.lineTo(sh.x - (sh.vx * sh.len / 12), sh.y - (sh.vy * sh.len / 12));
-        ctx.stroke();
-        if (sh.life > sh.maxLife) shooters.splice(i, 1);
-      });
-      requestAnimationFrame(frame);
-    }
-    resize();
-    window.addEventListener('resize', resize);
-    requestAnimationFrame(frame);
-  }, []);
-
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-[#07070a] text-[#f5f5f0] font-sans">
-      <canvas id="stars" className="absolute inset-0 z-0"></canvas>
-      <div className="absolute inset-0 z-0 pointer-events-none bg-[radial-gradient(60%_100%_at_50%_0%,rgba(59,130,246,0.14),rgba(59,130,246,0)_70%)] mix-blend-screen" />
+    <div className="flex h-screen w-full bg-[#09090b] text-zinc-100 font-sans selection:bg-white/20 overflow-hidden">
       
-      <div className="relative z-10 flex flex-col items-center justify-center h-full p-6">
-        <div className="flex items-center gap-4 mb-10 drop-shadow-[0_0_22px_rgba(212,160,23,0.25)]">
-          <svg className="w-14 h-14" viewBox="0 0 240 240">
-            <defs>
-              <linearGradient id="login-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#f2ca5c" />
-                <stop offset="50%" stopColor="#d4a017" />
-                <stop offset="100%" stopColor="#a3760a" />
-              </linearGradient>
-            </defs>
-            <circle cx="120" cy="100" r="36" fill="url(#login-grad)"/>
-            <polygon points="120,64 156,100 120,172 84,100" fill="url(#login-grad)"/>
-            <path d="M103,100 L115,112 L139,84" fill="none" stroke="#0a0a0a" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
+      {/* ----------------- LADO ESQUERDO (VISUAL ANIMADO) ----------------- */}
+      <div className="hidden lg:flex relative w-[55%] h-full flex-col justify-between overflow-hidden p-12 bg-zinc-950 border-r border-zinc-900">
+        
+        {/* Background Sutil (Grid) */}
+        <div className="absolute inset-0 z-0 opacity-[0.15]" 
+             style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '32px 32px' }} 
+        />
+        {/* Gradiente Radial Suave para profundidade (seguindo a estética Linear) */}
+        <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_100%_0%,rgba(212,160,23,0.06),transparent_40%),radial-gradient(circle_at_0%_100%,rgba(59,130,246,0.04),transparent_50%)]" />
+
+        {/* Header Esquerda */}
+        <div className="relative z-10 flex items-center gap-3">
+          <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-zinc-100 text-zinc-950 shadow-sm">
+            <Building2 className="w-5 h-5" />
+          </div>
           <div>
-            <h1 className="text-[29px] font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-[#f2ca5c] via-[#d4a017] to-[#a3760a]">Munago</h1>
-            <div className="w-[26px] h-0.5 bg-gradient-to-r from-[#f2ca5c] to-[#a3760a] my-2"></div>
-            <div className="text-[10.5px] font-semibold tracking-[1.4px] text-[#918f9a]">SISTEMA DE CONTROLE E RECOLHIMENTO</div>
+            <h1 className="text-xl font-bold tracking-tight text-white">Munago</h1>
+            <p className="text-[10px] font-semibold tracking-widest text-zinc-400 uppercase mt-0.5">Sistema de Controle</p>
           </div>
         </div>
 
-        <form className="w-full max-w-[360px] bg-white/5 dark:bg-[#111014]/60 backdrop-blur-2xl border border-white/10 dark:border-[#242229]/60 rounded-3xl p-8 shadow-2xl shadow-black/50 space-y-5" onSubmit={handleSubmit}>
-          {errorMsg && (
-            <div className="text-[11px] font-bold text-rose-300 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3 flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4" />
-              {errorMsg}
-            </div>
-          )}
-          {infoMsg && (
-            <div className="text-[11px] font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4" />
-              {infoMsg}
-            </div>
-          )}
-
-          {mode === 'register' && (
-            <div>
-              <label className="block text-[10px] font-black tracking-widest text-[#918f9a] mb-2 uppercase">Nome</label>
-              <input required type="text" value={name} onChange={e => setName(e.target.value)} className="login-input w-full h-11 rounded-xl bg-white/5 border border-white/10 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white placeholder-white/30" placeholder="Seu nome" />
-            </div>
-          )}
-          <div>
-            <label className="block text-[10px] font-black tracking-widest text-[#918f9a] mb-2 uppercase">E-mail</label>
-            <input required type="email" value={email} onChange={e => setEmail(e.target.value)} className="login-input w-full h-11 rounded-xl bg-white/5 border border-white/10 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white placeholder-white/30" placeholder="seu@email.com" />
-          </div>
-          <div>
-            <label className="block text-[10px] font-black tracking-widest text-[#918f9a] mb-2 uppercase">Senha</label>
-            <div className="relative">
-              <input
-                required
-                minLength={mode === 'register' ? 6 : undefined}
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                className="login-input w-full h-11 rounded-xl bg-white/5 border border-white/10 pl-4 pr-11 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white placeholder-white/30"
-                placeholder="••••••••"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                tabIndex={-1}
-                title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                className="absolute right-0 top-0 h-11 w-11 flex items-center justify-center text-white/40 hover:text-white/80 transition-colors"
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-          
-          <div className="pt-2 space-y-3">
-            <button type="submit" disabled={loading} className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center justify-center font-black text-xs text-white tracking-wider disabled:opacity-60 hover:from-blue-500 hover:to-indigo-500 transition-all shadow-lg shadow-blue-500/25 active:scale-95 group relative overflow-hidden">
-              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
-              <span className="relative z-10 flex items-center gap-2">
-                {mode === 'login' ? <Lock className="w-3.5 h-3.5" /> : <Mail className="w-3.5 h-3.5" />}
-                {loading ? (mode === 'register' ? 'Criando Conta...' : 'Entrando...') : (mode === 'register' ? 'Criar Conta' : 'Entrar no Sistema')}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setErrorMsg(''); setInfoMsg(''); }}
-              className="w-full h-12 rounded-xl border border-white/10 flex items-center justify-center font-bold text-xs text-white/70 tracking-wider hover:bg-white/5 hover:text-white transition-all"
+        {/* Carrossel Deslizante */}
+        <div className="relative z-10 h-[300px] flex items-center">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentSlide}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
+              className="max-w-lg"
             >
-              {mode === 'login' ? 'Criar Nova Conta' : 'Já Tenho Conta'}
-            </button>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900/80 border border-zinc-800 mb-6 backdrop-blur-md">
+                {slides[currentSlide].icon}
+                <span className="text-[11px] font-semibold text-zinc-300 tracking-wide">Plataforma Enterprise</span>
+              </div>
+              <h2 className="text-[3.25rem] font-bold leading-[1.05] tracking-tight mb-6 text-zinc-100">
+                {slides[currentSlide].title}<br />
+                <span className="text-zinc-500">{slides[currentSlide].highlight}</span>
+              </h2>
+              <p className="text-lg text-zinc-400 font-medium leading-relaxed max-w-md">
+                {slides[currentSlide].desc}
+              </p>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        {/* Footer Esquerda e Controles do Carrossel */}
+        <div className="relative z-10 flex items-center justify-between">
+          <div className="flex gap-2">
+            {slides.map((_, idx) => (
+              <button 
+                key={idx}
+                onClick={() => setCurrentSlide(idx)}
+                className={`h-1.5 rounded-full transition-all duration-500 ${currentSlide === idx ? 'w-8 bg-zinc-200' : 'w-2 bg-zinc-800 hover:bg-zinc-700'}`}
+                aria-label={`Ir para slide ${idx + 1}`}
+              />
+            ))}
           </div>
-        </form>
+          <div className="text-[11px] font-medium text-zinc-600">
+            &copy; {new Date().getFullYear()} Munago.
+          </div>
+        </div>
       </div>
 
+      {/* ----------------- LADO DIREITO (FORMULÁRIO ESTRUTURADO) ----------------- */}
+      <div className="relative flex-1 flex flex-col items-center justify-center p-6 sm:p-12 bg-[#050505]">
+        
+        {/* Glow sutil atrás do formulário */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-500/10 blur-[120px] rounded-full pointer-events-none" />
+
+        <motion.div 
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1] }}
+          className="w-full max-w-[420px] relative z-10 bg-white/[0.02] backdrop-blur-2xl border border-white/[0.05] p-8 sm:p-10 rounded-3xl shadow-2xl shadow-black/50"
+        >
+          {/* Logo Centralizado (Desktop e Mobile) */}
+          <div className="flex flex-col items-center gap-4 mb-8">
+            <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-[#f2ca5c] to-[#a3760a] shadow-lg shadow-amber-500/20 text-[#030305]">
+              <Building2 className="w-7 h-7" />
+            </div>
+            <div className="text-center">
+              <h1 className="text-2xl font-bold tracking-tight text-white">Munago</h1>
+              <p className="text-[10px] font-semibold tracking-[0.2em] text-[#d4a017] uppercase mt-1">Sistema de Controle</p>
+            </div>
+          </div>
+
+          <div className="mb-8 text-center">
+            <h3 className="text-xl font-semibold text-zinc-100 mb-1.5 tracking-tight">
+              {mode === 'login' ? 'Bem-vindo de volta' : 'Criar nova conta'}
+            </h3>
+            <p className="text-[13px] text-zinc-400">
+              {mode === 'login' 
+                ? 'Insira suas credenciais corporativas abaixo.'
+                : 'Preencha os dados corporativos solicitados.'}
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <AnimatePresence>
+              {errorMsg && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  animate={{ opacity: 1, height: 'auto', marginBottom: 16 }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="text-[12px] font-medium text-red-400 bg-red-950/30 border border-red-900/50 rounded-lg px-3 py-2.5 flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 shrink-0" />
+                    <span>{errorMsg}</span>
+                  </div>
+                </motion.div>
+              )}
+              {infoMsg && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  animate={{ opacity: 1, height: 'auto', marginBottom: 16 }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="text-[12px] font-medium text-emerald-400 bg-emerald-950/30 border border-emerald-900/50 rounded-lg px-3 py-2.5 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>{infoMsg}</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {mode === 'register' && (
+              <div className="space-y-1.5">
+                <label className="block text-[12px] font-medium text-zinc-300">Nome Completo</label>
+                <div className="relative">
+                  <input 
+                    required 
+                    type="text" 
+                    value={name} 
+                    onChange={e => setName(e.target.value)} 
+                    className="login-input w-full h-11 rounded-lg bg-zinc-900/50 border border-zinc-800 px-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 focus:bg-zinc-900 focus:ring-1 focus:ring-zinc-500 transition-all" 
+                    placeholder="Seu nome" 
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="block text-[12px] font-medium text-zinc-300">E-mail</label>
+              <div className="relative">
+                <input 
+                  required 
+                  type="email" 
+                  value={email} 
+                  onChange={e => setEmail(e.target.value)} 
+                  className="login-input w-full h-11 rounded-lg bg-zinc-900/50 border border-zinc-800 px-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 focus:bg-zinc-900 focus:ring-1 focus:ring-zinc-500 transition-all" 
+                  placeholder="nome@empresa.com" 
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-baseline">
+                <label className="block text-[12px] font-medium text-zinc-300">Senha</label>
+                {mode === 'login' && (
+                  <button type="button" className="text-[11px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors">
+                    Esqueceu a senha?
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <input
+                  required
+                  minLength={mode === 'register' ? 6 : undefined}
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="login-input w-full h-11 rounded-lg bg-zinc-900/50 border border-zinc-800 pl-3 pr-10 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 focus:bg-zinc-900 focus:ring-1 focus:ring-zinc-500 transition-all"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  tabIndex={-1}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            
+            <div className="pt-4 space-y-5">
+              <button 
+                type="submit" 
+                disabled={loading} 
+                className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex items-center justify-center gap-2 font-bold text-[13px] tracking-wide disabled:opacity-50 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-500/25 transition-all active:scale-[0.98]"
+              >
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                    {mode === 'register' ? 'Criando...' : 'Autenticando...'}
+                  </span>
+                ) : (
+                  <>
+                    <span>{mode === 'register' ? 'Criar Conta' : 'Acessar o Sistema'}</span>
+                    <ArrowRight className="w-4 h-4 opacity-80" />
+                  </>
+                )}
+              </button>
+
+              <div className="relative flex items-center py-2">
+                <div className="flex-grow border-t border-zinc-800"></div>
+                <span className="flex-shrink-0 mx-4 text-zinc-600 text-[10px] uppercase tracking-wider font-semibold">Suporte</span>
+                <div className="flex-grow border-t border-zinc-800"></div>
+              </div>
+
+              <div className="flex items-center justify-center gap-1.5 text-[12px] text-zinc-400">
+                <span>{mode === 'login' ? 'Ainda não tem acesso?' : 'Já possui conta?'}</span>
+                <button
+                  type="button"
+                  onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setErrorMsg(''); setInfoMsg(''); }}
+                  className="text-white hover:text-blue-400 font-semibold transition-colors"
+                >
+                  {mode === 'login' ? 'Solicite uma conta' : 'Fazer login'}
+                </button>
+              </div>
+            </div>
+          </form>
+          
+        </motion.div>
+      </div>
     </div>
   );
 };

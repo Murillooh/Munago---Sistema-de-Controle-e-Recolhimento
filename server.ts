@@ -10,7 +10,7 @@ import { startDeadlineAlertJob } from './src/server/push.js';
 // a API é api/index.ts, que usa o mesmo createApp() sem dar listen aqui.
 async function startServer() {
   const app = await createApp();
-  const PORT = 3000;
+  const PORT = 3005; // Fixado em 3005 para evitar conflitos com o Munago Tasks
 
   // Roda só aqui (processo local de vida longa), não na função serverless da
   // Vercel — lá cada invocação é curta e um setInterval não sobreviveria.
