@@ -1110,7 +1110,7 @@ export default function App() {
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           <GuidedTour runTrigger={runTourTrigger} />
           <BrowserNotifications items={items} sessionToken={sessionToken} />
-          <div className={['dashboard', 'asaas', 'tabela', 'bases', 'metas', 'notificacoes', 'relatorios', 'usuarios', 'estoque'].includes(activeTab) ? 'w-full' : 'max-w-7xl mx-auto'}>
+          <div className={['dashboard', 'asaas', 'tabela', 'bases', 'metas', 'notificacoes', 'relatorios', 'usuarios', 'estoque', 'franqueados'].includes(activeTab) ? 'w-full' : 'max-w-7xl mx-auto'}>
             {activeTab === 'dashboard' && (
               <DashboardView
                 items={items}
