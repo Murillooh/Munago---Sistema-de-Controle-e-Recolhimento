@@ -117,7 +117,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ items, goa
       setPushStatus({
         type: 'success',
         message:
-          'O servidor confirmou o envio do push de teste — chega mesmo com o site fechado. Não apareceu nada em alguns segundos? No Windows, confira Configurações > Sistema > Notificações (libere o Chrome/Edge) e se o Foco Assistido não está ativo.',
+          'O servidor confirmou o envio do push de teste. Não apareceu nada em alguns segundos? Confira, nesta ordem: (1) Windows > Configurações > Sistema > Notificações — Chrome/Edge liberado e Foco Assistido desligado; (2) no navegador, clique no cadeado ao lado do endereço > Notificações > Permitir (confirma que não ficou em "Perguntar" sem nunca ter respondido); (3) chrome://settings/system (ou edge://settings/system) — "Continuar executando apps em segundo plano ao fechar o navegador" precisa estar LIGADO, senão o push só chega quando você reabrir o navegador, nunca com ele fechado de verdade.',
       });
     } catch (err) {
       console.error('Falha ao testar push:', err);
