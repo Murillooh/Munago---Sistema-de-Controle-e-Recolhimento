@@ -1122,8 +1122,10 @@ export async function createApp() {
         if (jsonMatch) return res.json({ ...fallback, ...JSON.parse(jsonMatch[0]) });
         break;
       } catch (err: any) {
-        console.warn(`PDF intent model ${modelName} unavailable, attempting fallback...`);
-        if (!isOverloadedError(err)) break;
+        // Prompt é minúsculo, então tenta TODOS os modelos mesmo em erro
+        // "permanente" (modelo descontinuado, 404) — sem intenção o cliente
+        // cai num parser local bem mais limitado.
+        console.warn(`PDF intent model ${modelName} unavailable, attempting fallback...`, err?.status, err?.message);
       }
     }
 

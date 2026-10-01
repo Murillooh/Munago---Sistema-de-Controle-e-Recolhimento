@@ -113,6 +113,27 @@ interface PdfIntent {
   fraction: number | null;
 }
 
+// Fallback quando /api/chat/pdf-intent não responde nada útil (Gemini fora
+// do ar) — cobre pelo menos os casos óbvios ("10 maiores aguardando
+// pagamento", "atrasados") em vez de despejar a base inteira no PDF.
+function parsePdfIntentLocally(text: string): PdfIntent {
+  const t = text.toLowerCase();
+  let status: PdfIntent['status'] = null;
+  if (/atrasad/.test(t)) status = 'Atrasado';
+  else if (/aguardando|pendente/.test(t)) status = 'Aguardando pagamento';
+  else if (/recebid/.test(t)) status = 'Recebida';
+  else if (/confirmad/.test(t)) status = 'Confirmada';
+
+  const num = t.match(/\b(\d{1,4})\b/);
+  const limit = num ? parseInt(num[1], 10) || null : null;
+
+  let order: PdfIntent['order'] = null;
+  if (/maior/.test(t)) order = 'desc';
+  else if (/menor/.test(t)) order = 'asc';
+
+  return { status, limit, order, fraction: /metade/.test(t) ? 0.5 : null };
+}
+
 const STATUS_LABELS: Record<string, string> = {
   Confirmada: 'confirmados',
   Recebida: 'recebidos',
@@ -244,8 +265,8 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, estoqueItem
     if (wantsPdf(prompt)) {
       try {
         // IA interpreta a intenção de verdade (quantidade, status, ordem,
-        // fração) — cai pra "todos os registros" se o endpoint não
-        // responder nada útil (banco/IA fora do ar), nunca trava o pedido.
+        // fração) — cai pro parser local se o endpoint não responder nada
+        // útil (banco/IA fora do ar), nunca trava o pedido.
         let intent: PdfIntent = { status: null, limit: null, order: null, fraction: null };
         try {
           const intentRes = await fetch('/api/chat/pdf-intent', {
@@ -258,7 +279,10 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({ items, estoqueItem
           });
           if (intentRes.ok) intent = { ...intent, ...(await intentRes.json()) };
         } catch {
-          // segue com o fallback "todos os registros"
+          // segue pro parser local abaixo
+        }
+        if (!intent.status && !intent.limit && !intent.order && !intent.fraction) {
+          intent = parsePdfIntentLocally(prompt);
         }
 
         let filtered = intent.status ? items.filter((i) => i.status === intent.status) : items;

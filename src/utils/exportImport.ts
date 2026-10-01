@@ -67,7 +67,24 @@ export async function exportToPDF(
         'Content-Type': 'application/json',
         ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
       },
-      body: JSON.stringify({ items: data }),
+      // Só os campos que /api/reports/pdf realmente lê — o item inteiro
+      // (com tudo que vem do ASAAS) estoura o limite de 4.5MB de body da
+      // Vercel (413) quando a lista é grande.
+      body: JSON.stringify({
+        items: data.map((i) => ({
+          franquia: i.franquia,
+          cnpj: i.cnpj,
+          cCusto: i.cCusto,
+          vencimento: i.vencimento,
+          vencimentoOriginal: i.vencimentoOriginal,
+          dataPagamento: i.dataPagamento,
+          valor: i.valor,
+          status: i.status,
+          competenciaRecolhimento: i.competenciaRecolhimento,
+          competenciaPagamento: i.competenciaPagamento,
+          descricao: i.descricao,
+        })),
+      }),
     });
 
     if (!res.ok) {
