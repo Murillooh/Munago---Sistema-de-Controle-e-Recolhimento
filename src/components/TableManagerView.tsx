@@ -343,6 +343,17 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
     return isNaN(parsed.getTime()) ? null : parsed;
   }
 
+  // Hora em que o import automático do ASAAS trouxe esse lançamento pro
+  // Munago (App.tsx) — só existe pra quem veio de lá, não pra lançamento
+  // criado manual.
+  function formatImportedAt(iso: string) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const data = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return `${data} às ${hora}`;
+  }
+
   // Filtered items
   const filteredItems = useMemo(() => {
     const now = new Date();
@@ -979,6 +990,11 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
                           {validateCell(item.dataCriacao, 'dataCriacao') && <AlertCircle className="w-3 h-3 text-rose-500 shrink-0" />}
                           <span>{item.dataCriacao}</span>
                         </div>
+                        {item.asaasImportedAt && (
+                          <span className="block text-[9px] font-semibold text-blue-500 dark:text-blue-400 mt-0.5">
+                            Puxado às {formatImportedAt(item.asaasImportedAt)}
+                          </span>
+                        )}
                       </td>
                     )}
                     {columnVisibility.vencimento && (
