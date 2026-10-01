@@ -1272,10 +1272,13 @@ export async function createApp() {
       // criar um novo toda vez — antes cada cobrança gerava um cliente
       // duplicado, e qualquer e-mail/telefone/endereço já cadastrado lá era
       // ignorado (o boleto saía só com nome+CNPJ).
-      const lookupRes = await fetch(`${baseUrl}/customers?cpfCnpj=${cpfCnpj}`, {
-        headers: { 'access_token': token, 'Content-Type': 'application/json' },
-      });
-      const existingCustomer = lookupRes.ok ? (await lookupRes.json())?.data?.[0] : null;
+      // Cobrança avulsa já escolhe o franqueado direto da lista de clientes
+      // do ASAAS — manda o id, sem precisar casar por CNPJ (que pode faltar).
+      const existingCustomer = chargeData.asaasCustomerId
+        ? { id: String(chargeData.asaasCustomerId) }
+        : await fetch(`${baseUrl}/customers?cpfCnpj=${cpfCnpj}`, {
+            headers: { 'access_token': token, 'Content-Type': 'application/json' },
+          }).then(async (r) => (r.ok ? (await r.json())?.data?.[0] : null));
 
       let customerId: string;
       if (existingCustomer) {

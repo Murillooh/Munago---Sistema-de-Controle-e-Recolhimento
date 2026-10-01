@@ -18,7 +18,6 @@ import {
   Tag,
   Mail,
   Phone,
-  MapPin,
   Clock,
   XCircle,
   Folder,
@@ -40,6 +39,18 @@ interface AsaasCustomerInfo {
   addressNumber: string;
   complement: string;
   province: string;
+}
+
+// Franqueado = cliente já cadastrado na conta ASAAS de uma base (mesma
+// lista da tela Franqueados), com a base anotada pra saber qual chave usar.
+interface AdHocFranqueado {
+  id: string;
+  name: string;
+  cpfCnpj: string;
+  email: string;
+  phone: string;
+  unidadeId: string;
+  unidadeNome: string;
 }
 
 interface AsaasIntegrationViewProps {
@@ -86,15 +97,8 @@ const formatImportedAt = (iso: string) => {
 };
 
 const EMPTY_AD_HOC_FORM = {
-  unidadeId: '',
-  // Cliente — pré-preenchido pela busca no ASAAS (customerLookup) quando já existe cadastro.
-  email: '',
-  phone: '',
-  postalCode: '',
-  address: '',
-  addressNumber: '',
-  complement: '',
-  province: '',
+  // `${unidadeId}:${customerId}` — franqueado (cliente ASAAS) + a base dona da conta.
+  franqueadoKey: '',
   // Cobrança
   valor: '',
   vencimento: '',
@@ -246,9 +250,11 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   // interromper tudo no primeiro alert() como fazia o botão individual.
   const generateCharge = async (
     item: RecolhimentoItem,
-    extra?: Partial<AsaasCustomerInfo> & { billingType?: AsaasBillingType; externalReference?: string; fine?: { value: number }; interest?: { value: number }; discount?: { value: number; dueDateLimitDays: number } }
+    extra?: Partial<AsaasCustomerInfo> & { asaasCustomerId?: string; billingType?: AsaasBillingType; externalReference?: string; fine?: { value: number }; interest?: { value: number }; discount?: { value: number; dueDateLimitDays: number } },
+    // Cobrança avulsa já sabe a base (conta ASAAS) do franqueado escolhido.
+    unidadeOverride?: Unidade
   ): Promise<{ ok: true; invoiceUrl?: string } | { ok: false; error: string }> => {
-    const unidade = findUnidade(item);
+    const unidade = unidadeOverride || findUnidade(item);
     if (!unidade?.hasAsaasKey) {
       return { ok: false, error: `${item.franquia}: sem chave ASAAS configurada (Bases > Unidades).` };
     }
@@ -300,83 +306,85 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
   const [adHocStep, setAdHocStep] = useState<'cliente' | 'cobranca'>('cliente');
   const [adHocForm, setAdHocForm] = useState(EMPTY_AD_HOC_FORM);
   const [adHocGenerating, setAdHocGenerating] = useState(false);
-  // Cadastro do cliente já existente no ASAAS pra essa franquia (CNPJ) —
-  // 'idle' = nada buscado ainda, 'loading' = buscando, 'found'/'not-found' =
-  // resultado da consulta. É o que garante que o boleto saia com e-mail/
-  // telefone/endereço já cadastrados, sem faltar nada.
-  const [customerLookup, setCustomerLookup] = useState<
-    { status: 'idle' } | { status: 'loading' } | { status: 'found'; customer: AsaasCustomerInfo } | { status: 'not-found' } | { status: 'error'; error: string }
-  >({ status: 'idle' });
   const [adHocResult, setAdHocResult] = useState<{ invoiceUrl?: string } | null>(null);
+  // Franqueados (clientes ASAAS) de todas as bases com chave — carregados
+  // quando o modal abre, mesma consulta da tela Franqueados.
+  const [franqueados, setFranqueados] = useState<AdHocFranqueado[]>([]);
+  const [franqueadosLoading, setFranqueadosLoading] = useState(false);
+  const [franqueadosErrors, setFranqueadosErrors] = useState<string[]>([]);
+  const [franqueadoSearch, setFranqueadoSearch] = useState('');
+
+  const loadFranqueados = async () => {
+    const bases = unidades.filter((u) => u.hasAsaasKey);
+    setFranqueadosLoading(true);
+    const all: AdHocFranqueado[] = [];
+    const errors: string[] = [];
+    await Promise.all(
+      bases.map(async (base) => {
+        let offset = 0;
+        try {
+          for (let page = 0; page < 50; page++) {
+            const res = await fetch('/api/asaas/list-customers', {
+              method: 'POST',
+              headers: asaasAuthHeaders(),
+              body: JSON.stringify({ unidadeId: base.id, sandbox, offset }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              errors.push(`${base.nome}: ${data.error || `HTTP ${res.status}`}`);
+              break;
+            }
+            const pageCustomers = Array.isArray(data.customers) ? data.customers : [];
+            for (const c of pageCustomers) {
+              all.push({ id: c.id, name: c.name, cpfCnpj: c.cpfCnpj, email: c.email, phone: c.phone, unidadeId: base.id, unidadeNome: base.nome });
+            }
+            if (!data.hasMore) break;
+            offset = data.nextOffset ?? offset + pageCustomers.length;
+          }
+        } catch {
+          errors.push(`${base.nome}: falha ao comunicar com a API do ASAAS.`);
+        }
+      })
+    );
+    all.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    setFranqueados(all);
+    setFranqueadosErrors(errors);
+    setFranqueadosLoading(false);
+  };
 
   const openAdHocModal = () => {
     setAdHocForm({ ...EMPTY_AD_HOC_FORM, billingType });
     setAdHocStep('cliente');
-    setCustomerLookup({ status: 'idle' });
+    setFranqueadoSearch('');
     setAdHocResult(null);
     setShowAdHocModal(true);
+    loadFranqueados();
   };
 
-  const adHocUnidade = unidades.find((u) => u.id === adHocForm.unidadeId);
+  const adHocFranqueado = franqueados.find((c) => `${c.unidadeId}:${c.id}` === adHocForm.franqueadoKey);
+  const adHocUnidade = adHocFranqueado ? unidades.find((u) => u.id === adHocFranqueado.unidadeId) : undefined;
 
-  const handleAdHocUnidadeChange = async (unidadeId: string) => {
-    const u = unidades.find((x) => x.id === unidadeId);
-    setAdHocForm((prev) => ({
-      ...prev,
-      unidadeId,
-      cCusto: u?.cCustoPadrao || prev.cCusto,
-      // Limpa o que veio da franquia anterior — não faz sentido carregar
-      // e-mail/endereço de outro cliente pra essa seleção nova.
-      email: '',
-      phone: '',
-      postalCode: '',
-      address: '',
-      addressNumber: '',
-      complement: '',
-      province: '',
-    }));
+  const filteredFranqueados = useMemo(() => {
+    const q = franqueadoSearch.trim().toLowerCase();
+    const qDigits = onlyDigits(q);
+    if (!q) return franqueados;
+    return franqueados.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.unidadeNome.toLowerCase().includes(q) ||
+        (qDigits && onlyDigits(c.cpfCnpj).includes(qDigits))
+    );
+  }, [franqueados, franqueadoSearch]);
+
+  const handleAdHocFranqueadoChange = (key: string) => {
+    const c = franqueados.find((x) => `${x.unidadeId}:${x.id}` === key);
+    const base = c ? unidades.find((u) => u.id === c.unidadeId) : undefined;
+    setAdHocForm((prev) => ({ ...prev, franqueadoKey: key, cCusto: base?.cCustoPadrao || base?.nome || prev.cCusto }));
     setAdHocResult(null);
-
-    if (!u?.hasAsaasKey || !u.cnpj) {
-      setCustomerLookup({ status: 'idle' });
-      return;
-    }
-    setCustomerLookup({ status: 'loading' });
-    try {
-      const res = await fetch('/api/asaas/customer-lookup', {
-        method: 'POST',
-        headers: asaasAuthHeaders(),
-        body: JSON.stringify({ unidadeId: u.id, sandbox, cnpj: u.cnpj }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setCustomerLookup({ status: 'error', error: data.error || 'Falha ao consultar cliente no ASAAS.' });
-        return;
-      }
-      if (data.found) {
-        setCustomerLookup({ status: 'found', customer: data.customer });
-        // Pré-preenche com o que já existe no ASAAS — o objetivo de puxar o
-        // cadastro é justamente não deixar faltar nada na hora de gerar.
-        setAdHocForm((prev) => ({
-          ...prev,
-          email: data.customer.email || '',
-          phone: data.customer.mobilePhone || data.customer.phone || '',
-          postalCode: data.customer.postalCode || '',
-          address: data.customer.address || '',
-          addressNumber: data.customer.addressNumber || '',
-          complement: data.customer.complement || '',
-          province: data.customer.province || '',
-        }));
-      } else {
-        setCustomerLookup({ status: 'not-found' });
-      }
-    } catch {
-      setCustomerLookup({ status: 'error', error: 'Falha ao comunicar com a API do ASAAS.' });
-    }
   };
 
   const handleGenerateAdHoc = async () => {
-    if (!adHocUnidade || !adHocForm.valor || !adHocForm.vencimento) return;
+    if (!adHocFranqueado || !adHocUnidade || !adHocForm.valor || !adHocForm.vencimento) return;
 
     // O lançamento entra na Planilha ANTES de chamar o ASAAS — generateCharge
     // atualiza o item pelo id via onUpdateItem, que só acha algo que já
@@ -384,9 +392,9 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
     // "Aguardando pagamento" normal, pronto pra tentar gerar de novo na lista.
     const newItem: RecolhimentoItem = {
       id: `item-${Date.now()}`,
-      franquia: adHocUnidade.nome,
-      cnpj: adHocUnidade.cnpj,
-      cCusto: adHocForm.cCusto || adHocUnidade.cCustoPadrao || '',
+      franquia: adHocFranqueado.name,
+      cnpj: adHocFranqueado.cpfCnpj,
+      cCusto: adHocForm.cCusto || adHocUnidade.cCustoPadrao || adHocUnidade.nome,
       dataCriacao: new Date().toLocaleDateString('pt-BR'),
       vencimento: isoToBr(adHocForm.vencimento),
       vencimentoOriginal: isoToBr(adHocForm.vencimento),
@@ -395,24 +403,16 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
       status: 'Aguardando pagamento',
       competenciaRecolhimento: competenciaFromIso(adHocForm.vencimento),
       competenciaPagamento: '',
-      descricao: adHocForm.descricao || `Cobrança avulsa - ${adHocUnidade.nome}`,
+      descricao: adHocForm.descricao || `Cobrança avulsa - ${adHocFranqueado.name}`,
     };
 
     setAdHocGenerating(true);
     try {
       onAddItem(newItem);
-      // O servidor já busca o cliente por CNPJ e reaproveita cadastro
-      // existente no ASAAS; os campos de contato abaixo só são usados de
-      // verdade quando o cliente ainda não existe lá (customerLookup
-      // 'not-found') — é o que garante que a criação não saia faltando nada.
+      // Franqueado já existe no ASAAS — cobra direto no id dele, na conta
+      // da base onde ele está cadastrado.
       const result = await generateCharge(newItem, {
-        email: adHocForm.email || undefined,
-        phone: adHocForm.phone || undefined,
-        postalCode: adHocForm.postalCode || undefined,
-        address: adHocForm.address || undefined,
-        addressNumber: adHocForm.addressNumber || undefined,
-        complement: adHocForm.complement || undefined,
-        province: adHocForm.province || undefined,
+        asaasCustomerId: adHocFranqueado.id,
         billingType: adHocForm.billingType,
         externalReference: adHocForm.externalReference || undefined,
         fine: adHocForm.multaAtiva && Number(adHocForm.multaPercent) > 0 ? { value: Number(adHocForm.multaPercent) } : undefined,
@@ -421,7 +421,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
           adHocForm.descontoAtivo && Number(adHocForm.descontoValor) > 0
             ? { value: Number(adHocForm.descontoValor), dueDateLimitDays: Number(adHocForm.descontoDias) || 0 }
             : undefined,
-      });
+      }, adHocUnidade);
       if (result.ok === false) {
         showNotice('error', 'Lançamento adicionado, mas a cobrança falhou', [
           result.error,
@@ -954,154 +954,79 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
             ) : adHocStep === 'cliente' ? (
               <>
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Franquia (Unidade)</label>
-                  <select
-                    value={adHocForm.unidadeId}
-                    onChange={(e) => handleAdHocUnidadeChange(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
-                  >
-                    <option value="">Selecione a franquia...</option>
-                    {unidades.map((u) => (
-                      <option key={u.id} value={u.id}>{u.nome}</option>
-                    ))}
-                  </select>
-                  {adHocUnidade && (
-                    <p className="text-[10px] text-slate-400 mt-1 font-mono">{adHocUnidade.cnpj || 'sem CNPJ cadastrado'}</p>
-                  )}
-                  {adHocUnidade && !adHocUnidade.hasAsaasKey && (
-                    <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-1">Sem chave ASAAS configurada para esta unidade (Bases &gt; Unidades).</p>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Franqueado</label>
+                  {franqueadosLoading ? (
+                    <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-400">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Carregando franqueados do ASAAS...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="relative mb-2">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                        <input
+                          type="text"
+                          value={franqueadoSearch}
+                          onChange={(e) => setFranqueadoSearch(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                          placeholder="Buscar por nome, CNPJ ou base..."
+                        />
+                      </div>
+                      <select
+                        value={adHocForm.franqueadoKey}
+                        onChange={(e) => handleAdHocFranqueadoChange(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                      >
+                        <option value="">
+                          {franqueados.length === 0 ? 'Nenhum franqueado encontrado no ASAAS' : `Selecione o franqueado (${filteredFranqueados.length})...`}
+                        </option>
+                        {Array.from(new Set(filteredFranqueados.map((c) => c.unidadeNome))).map((base) => (
+                          <optgroup key={base} label={base}>
+                            {filteredFranqueados
+                              .filter((c) => c.unidadeNome === base)
+                              .map((c) => (
+                                <option key={`${c.unidadeId}:${c.id}`} value={`${c.unidadeId}:${c.id}`}>
+                                  {c.name}{c.cpfCnpj ? ` — ${c.cpfCnpj}` : ''}
+                                </option>
+                              ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </>
                   )}
 
-                  {customerLookup.status === 'loading' && (
-                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500 font-semibold mt-2">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      <span>Consultando cadastro do cliente no ASAAS...</span>
-                    </div>
-                  )}
-                  {customerLookup.status === 'found' && (
-                    <div className="mt-2 p-2.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 rounded-xl text-[10px] text-emerald-800 dark:text-emerald-300 flex items-start gap-2">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                      <p className="font-bold">Cliente já cadastrado no ASAAS — dados abaixo vieram de lá. Pra mudar, edite direto no ASAAS.</p>
-                    </div>
-                  )}
-                  {customerLookup.status === 'not-found' && (
-                    <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400 font-bold">
+                  {franqueadosErrors.length > 0 && (
+                    <div className="mt-2 flex items-start gap-1.5 text-[10px] text-rose-600 dark:text-rose-400 font-bold">
                       <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                      <span>Nenhum cadastro encontrado — preencha abaixo pra criar o cliente no ASAAS.</span>
-                    </div>
-                  )}
-                  {customerLookup.status === 'error' && (
-                    <div className="mt-2 flex items-center gap-1.5 text-[10px] text-rose-600 dark:text-rose-400 font-bold">
-                      <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                      <span>{customerLookup.error}</span>
+                      <span>{franqueadosErrors.join(' • ')}</span>
                     </div>
                   )}
                 </div>
 
-                {(() => {
-                  const readOnly = customerLookup.status === 'found';
-                  const fieldsDisabled = !adHocUnidade || customerLookup.status === 'loading';
-                  const inputCls = `w-full pl-9 pr-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none disabled:opacity-50 ${readOnly ? 'text-slate-500 dark:text-slate-400' : ''}`;
-                  return (
-                    <>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">E-mail</label>
-                          <div className="relative">
-                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                            <input
-                              type="email"
-                              value={adHocForm.email}
-                              disabled={fieldsDisabled || readOnly}
-                              onChange={(e) => setAdHocForm({ ...adHocForm, email: e.target.value })}
-                              className={inputCls}
-                              placeholder="financeiro@franquia.com.br"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Telefone</label>
-                          <div className="relative">
-                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                            <input
-                              type="text"
-                              value={adHocForm.phone}
-                              disabled={fieldsDisabled || readOnly}
-                              onChange={(e) => setAdHocForm({ ...adHocForm, phone: e.target.value })}
-                              className={inputCls}
-                              placeholder="(00) 00000-0000"
-                            />
-                          </div>
-                        </div>
+                {adHocFranqueado && (
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{adHocFranqueado.name}</p>
+                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">{adHocFranqueado.cpfCnpj || 'sem CPF/CNPJ no ASAAS'}</p>
                       </div>
-
-                      <div className="grid grid-cols-3 gap-3">
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">CEP</label>
-                          <div className="relative">
-                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                            <input
-                              type="text"
-                              value={adHocForm.postalCode}
-                              disabled={fieldsDisabled || readOnly}
-                              onChange={(e) => setAdHocForm({ ...adHocForm, postalCode: e.target.value })}
-                              className={inputCls}
-                              placeholder="00000-000"
-                            />
-                          </div>
-                        </div>
-                        <div className="col-span-2">
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Bairro</label>
-                          <input
-                            type="text"
-                            value={adHocForm.province}
-                            disabled={fieldsDisabled || readOnly}
-                            onChange={(e) => setAdHocForm({ ...adHocForm, province: e.target.value })}
-                            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none disabled:opacity-50"
-                            placeholder="Ex: Centro"
-                          />
-                        </div>
+                      <span className="shrink-0 inline-flex items-center rounded-md bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 ring-1 ring-inset ring-emerald-600/20">
+                        Base {adHocFranqueado.unidadeNome}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-xs text-slate-600 dark:text-slate-300">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                        <span className="truncate">{adHocFranqueado.email || 'sem e-mail'}</span>
                       </div>
-
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="col-span-2">
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Endereço</label>
-                          <input
-                            type="text"
-                            value={adHocForm.address}
-                            disabled={fieldsDisabled || readOnly}
-                            onChange={(e) => setAdHocForm({ ...adHocForm, address: e.target.value })}
-                            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none disabled:opacity-50"
-                            placeholder="Ex: Rua das Franquias"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Número</label>
-                          <input
-                            type="text"
-                            value={adHocForm.addressNumber}
-                            disabled={fieldsDisabled || readOnly}
-                            onChange={(e) => setAdHocForm({ ...adHocForm, addressNumber: e.target.value })}
-                            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none disabled:opacity-50"
-                            placeholder="s/n"
-                          />
-                        </div>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                        <span className="truncate">{adHocFranqueado.phone || 'sem telefone'}</span>
                       </div>
-
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Complemento</label>
-                        <input
-                          type="text"
-                          value={adHocForm.complement}
-                          disabled={fieldsDisabled || readOnly}
-                          onChange={(e) => setAdHocForm({ ...adHocForm, complement: e.target.value })}
-                          className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none disabled:opacity-50"
-                          placeholder="Sala, bloco, referência..."
-                        />
-                      </div>
-                    </>
-                  );
-                })()}
+                    </div>
+                    <p className="text-[10px] text-slate-400">Dados do cadastro no ASAAS. Pra mudar, edite direto no ASAAS.</p>
+                  </div>
+                )}
 
                 <div className="flex gap-3 pt-2">
                   <button
@@ -1113,7 +1038,7 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                   </button>
                   <button
                     type="button"
-                    disabled={!adHocUnidade || !adHocUnidade.hasAsaasKey || customerLookup.status === 'loading'}
+                    disabled={!adHocFranqueado || !adHocUnidade?.hasAsaasKey}
                     onClick={() => setAdHocStep('cobranca')}
                     className="flex-1 px-4 py-2.5 bg-emerald-600 text-white font-black rounded-xl text-xs hover:bg-emerald-700 disabled:opacity-50 transition-all shadow-lg shadow-emerald-600/20 uppercase tracking-widest flex items-center justify-center space-x-2"
                   >
