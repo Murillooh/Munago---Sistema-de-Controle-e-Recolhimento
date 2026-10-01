@@ -969,29 +969,45 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                           value={franqueadoSearch}
                           onChange={(e) => setFranqueadoSearch(e.target.value)}
                           className="w-full pl-9 pr-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
-                          placeholder="Buscar por nome, CNPJ ou base..."
+                          placeholder={`Buscar entre ${franqueados.length} franqueados por nome, CNPJ ou base...`}
                         />
                       </div>
-                      <select
-                        value={adHocForm.franqueadoKey}
-                        onChange={(e) => handleAdHocFranqueadoChange(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
-                      >
-                        <option value="">
-                          {franqueados.length === 0 ? 'Nenhum franqueado encontrado no ASAAS' : `Selecione o franqueado (${filteredFranqueados.length})...`}
-                        </option>
-                        {Array.from(new Set(filteredFranqueados.map((c) => c.unidadeNome))).map((base) => (
-                          <optgroup key={base} label={base}>
-                            {filteredFranqueados
-                              .filter((c) => c.unidadeNome === base)
-                              .map((c) => (
-                                <option key={`${c.unidadeId}:${c.id}`} value={`${c.unidadeId}:${c.id}`}>
-                                  {c.name}{c.cpfCnpj ? ` — ${c.cpfCnpj}` : ''}
-                                </option>
-                              ))}
-                          </optgroup>
-                        ))}
-                      </select>
+                      {/* Lista própria em vez de <select> nativo — com 800+ opções o
+                          popup do navegador (sem busca própria, visual quebrado
+                          fora do tema) fica inutilizável. Mesmo motivo do
+                          DatePicker/StatusSelect. */}
+                      <div className="max-h-60 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-xl divide-y divide-slate-100 dark:divide-slate-800">
+                        {filteredFranqueados.length === 0 ? (
+                          <p className="p-3 text-xs text-slate-400 italic text-center">
+                            {franqueados.length === 0 ? 'Nenhum franqueado encontrado no ASAAS.' : 'Nenhum resultado pra essa busca.'}
+                          </p>
+                        ) : (
+                          <>
+                            {filteredFranqueados.slice(0, 80).map((c) => {
+                              const key = `${c.unidadeId}:${c.id}`;
+                              const selected = adHocForm.franqueadoKey === key;
+                              return (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  onClick={() => handleAdHocFranqueadoChange(key)}
+                                  className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                                    selected ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                                  }`}
+                                >
+                                  <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{c.name}</p>
+                                  <p className="text-[10px] text-slate-400 font-mono">{c.cpfCnpj || 'sem CNPJ'} · {c.unidadeNome}</p>
+                                </button>
+                              );
+                            })}
+                            {filteredFranqueados.length > 80 && (
+                              <p className="p-2 text-center text-[10px] text-slate-400 italic">
+                                Mostrando 80 de {filteredFranqueados.length} — refine a busca pra achar mais rápido.
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </>
                   )}
 
