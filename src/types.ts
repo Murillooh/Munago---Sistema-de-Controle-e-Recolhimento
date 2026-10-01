@@ -38,7 +38,7 @@ export interface GoalSettings {
   detailedGoals?: DetailedGoal[];
 }
 
-export type ActiveTab = 'dashboard' | 'tabela' | 'metas' | 'notificacoes' | 'asaas' | 'bases' | 'relatorios' | 'usuarios' | 'estoque';
+export type ActiveTab = 'dashboard' | 'tabela' | 'metas' | 'notificacoes' | 'asaas' | 'bases' | 'relatorios' | 'usuarios' | 'estoque' | 'franqueados';
 
 // Abas que o admin pode liberar/bloquear por usuário. Fora da lista de
 // propósito: "dashboard" (sempre liberado — é a tela de pouso, ninguém pode
@@ -50,6 +50,7 @@ export const PERMISSION_TABS: { id: ActiveTab; label: string }[] = [
   { id: 'estoque', label: 'Estoque' },
   { id: 'relatorios', label: 'Relatórios' },
   { id: 'asaas', label: 'ASAAS' },
+  { id: 'franqueados', label: 'Franqueados' },
   { id: 'bases', label: 'Bases' },
   { id: 'notificacoes', label: 'Notificações' },
 ];

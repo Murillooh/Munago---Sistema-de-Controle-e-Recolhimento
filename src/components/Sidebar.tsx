@@ -24,6 +24,7 @@ import {
   MessageCircle,
   X,
   Boxes,
+  Store,
 } from 'lucide-react';
 import { exportToExcel, exportToPDF } from '../utils/exportImport';
 import { canAccessTab } from '../utils/permissions';
@@ -251,6 +252,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <CreditCard className={`w-4 h-4 ${isCollapsed ? 'text-emerald-400' : 'text-emerald-400'}`} />
             {!isCollapsed && <span>Banco ASAAS</span>}
+          </button>
+          )}
+
+          {canAccessTab(currentUser, 'franqueados') && (
+          <button
+            onClick={() => {
+              setActiveTab('franqueados');
+              setIsOpen(false);
+            }}
+            className={`w-full flex items-center rounded-xl transition-all duration-200 ${
+              isCollapsed ? 'justify-center p-2.5' : 'space-x-2.5 px-3 py-2.5 text-[11px] font-bold'
+            } ${
+              activeTab === 'franqueados'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white hover:translate-x-0.5'
+            }`}
+            title="Franqueados"
+          >
+            <Store className="w-4 h-4" />
+            {!isCollapsed && <span>Franqueados</span>}
           </button>
           )}
 

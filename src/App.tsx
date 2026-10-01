@@ -9,6 +9,7 @@ import { EstoqueView } from './components/EstoqueView';
 import { MetasView } from './components/MetasView';
 import { NotificationsView } from './components/NotificationsView';
 import { AsaasIntegrationView } from './components/AsaasIntegrationView';
+import { FranqueadosView } from './components/FranqueadosView';
 import { BasesManagerView } from './components/BasesManagerView';
 import { ReportsView } from './components/ReportsView';
 import { LoginView } from './components/LoginView';
@@ -149,7 +150,7 @@ export default function App() {
     setEstoqueItems([]);
   };
 
-  const VALID_TABS: ActiveTab[] = ['dashboard', 'tabela', 'metas', 'notificacoes', 'asaas', 'bases', 'relatorios', 'usuarios', 'estoque'];
+  const VALID_TABS: ActiveTab[] = ['dashboard', 'tabela', 'metas', 'notificacoes', 'asaas', 'bases', 'relatorios', 'usuarios', 'estoque', 'franqueados'];
   // Persiste a aba atual — sem isso, um F5 sempre voltava pro Dashboard,
   // mesmo estando em outra tela no meio de um trabalho.
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
@@ -1023,6 +1024,7 @@ export default function App() {
                 {activeTab === 'metas' && 'Metas'}
                 {activeTab === 'notificacoes' && 'Notificações'}
                 {activeTab === 'asaas' && 'Integração ASAAS'}
+                {activeTab === 'franqueados' && 'Franqueados'}
                 {activeTab === 'bases' && 'Gestão de Bases'}
                 {activeTab === 'relatorios' && 'Relatórios'}
                 {activeTab === 'usuarios' && 'Usuários'}
@@ -1140,6 +1142,9 @@ export default function App() {
             )}
             {activeTab === 'asaas' && canAccessTab(currentUser, 'asaas') && (
               <AsaasIntegrationView items={items} unidades={unidades} sessionToken={sessionToken} onUpdateItem={handleUpdateItem} onAddItem={handleAddItem} onImportAsaasHistory={runAsaasImport} />
+            )}
+            {activeTab === 'franqueados' && canAccessTab(currentUser, 'franqueados') && (
+              <FranqueadosView unidades={unidades} currentUser={currentUser} sessionToken={sessionToken} />
             )}
             {activeTab === 'usuarios' && currentUser?.role === 'admin' && (
               <AdminUsersView sessionToken={sessionToken} currentUserId={currentUser.id} unidades={unidades} />

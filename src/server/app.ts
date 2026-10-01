@@ -179,7 +179,7 @@ export async function createApp() {
   // "dashboard" (sempre liberado) e "usuarios" (sempre admin-only, nunca
   // configurável) — ver PERMISSION_TABS/canAccessTab no front, src/types.ts
   // e src/utils/permissions.ts.
-  const VALID_PERMISSION_TABS = ['tabela', 'metas', 'notificacoes', 'asaas', 'bases', 'relatorios', 'estoque'];
+  const VALID_PERMISSION_TABS = ['tabela', 'metas', 'notificacoes', 'asaas', 'bases', 'relatorios', 'estoque', 'franqueados'];
 
   // Aprova, rejeita, promove ou ajusta as permissões de abas de um usuário
   // (admin only).
@@ -1492,6 +1492,46 @@ export async function createApp() {
       }));
       const hasMore = Boolean(data.hasMore) && pageItems.length > 0;
       res.json({ success: true, payments: mapped, hasMore, nextOffset: offset + PAGE_LIMIT });
+    } catch (err: any) {
+      res.status(502).json({ error: 'Falha ao comunicar com a API do ASAAS: ' + err.message });
+    }
+  });
+
+  // Lista os clientes (franqueados) cadastrados numa conta ASAAS — usado pela
+  // aba Franqueados pra montar a lista com todo mundo já cadastrado lá,
+  // sem precisar buscar CNPJ por CNPJ. Mesmo esquema de paginação do
+  // list-payments (uma página de cada vez) pelo mesmo motivo: não estourar
+  // os 10s do plano Hobby da Vercel numa conta com muito cliente cadastrado.
+  app.post('/api/asaas/list-customers', requireAuth, async (req, res) => {
+    const { sandbox, offset: rawOffset } = req.body || {};
+    const token = await getAsaasToken(req);
+    if (!token) return res.status(400).json({ error: 'Chave API ASAAS obrigatória.' });
+
+    const baseUrl = sandbox ? 'https://sandbox.asaas.com/v3' : 'https://api.asaas.com/v3';
+    const PAGE_LIMIT = 100;
+    const offset = Number.isFinite(Number(rawOffset)) && Number(rawOffset) >= 0 ? Number(rawOffset) : 0;
+    try {
+      const response = await fetch(`${baseUrl}/customers?limit=${PAGE_LIMIT}&offset=${offset}`, {
+        headers: { 'access_token': token, 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) {
+        const error = await readAsaasError(response, 'Falha ao listar clientes no ASAAS.');
+        return res.status(response.status).json({ error });
+      }
+      const data = await response.json();
+      const pageItems = Array.isArray(data.data) ? data.data : [];
+      const mapped = pageItems.map((c: any) => ({
+        id: c.id,
+        name: c.name || '',
+        cpfCnpj: c.cpfCnpj || '',
+        email: c.email || '',
+        phone: c.mobilePhone || c.phone || '',
+        city: c.city || '',
+        state: c.state || '',
+        address: c.address || '',
+      }));
+      const hasMore = Boolean(data.hasMore) && pageItems.length > 0;
+      res.json({ success: true, customers: mapped, hasMore, nextOffset: offset + PAGE_LIMIT });
     } catch (err: any) {
       res.status(502).json({ error: 'Falha ao comunicar com a API do ASAAS: ' + err.message });
     }
