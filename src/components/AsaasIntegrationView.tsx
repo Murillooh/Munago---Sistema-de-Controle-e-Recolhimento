@@ -26,6 +26,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { findUnidadeForItem, ASAAS_AUTO_IMPORT_INTERVAL_MS } from '../utils/unidades';
+import { DatePicker } from './DatePicker';
 
 // Campos de cliente que o ASAAS aceita ao criar/cobrar (fora nome/CNPJ, que
 // já vêm da franquia) — buscados do cadastro existente pra "Cobrança Avulsa"
@@ -1100,11 +1101,10 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
                   </div>
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Vencimento</label>
-                    <input
-                      type="date"
+                    <DatePicker
                       value={adHocForm.vencimento}
-                      onChange={(e) => setAdHocForm({ ...adHocForm, vencimento: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                      onChange={(v) => setAdHocForm({ ...adHocForm, vencimento: v })}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors"
                     />
                   </div>
                 </div>
