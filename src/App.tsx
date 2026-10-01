@@ -120,7 +120,12 @@ export default function App() {
     return fallback;
   };
 
+  // Mensagem mostrada na tela de login quando o logout não foi um clique em
+  // "Sair" (ex: inatividade) — explica pro usuário por que ele voltou aqui.
+  const [loggedOutReason, setLoggedOutReason] = useState<string | null>(null);
+
   const handleLoginSuccess = (user: AuthUser, token: string | null) => {
+    setLoggedOutReason(null);
     setCurrentUser(user);
     setSessionToken(token);
     localStorage.setItem('locgrupo_session', JSON.stringify({ user, token }));
@@ -134,7 +139,9 @@ export default function App() {
     setEstoqueItems(loadUserCache('locgrupo_estoque', user.id, []));
   };
 
-  const handleLogout = () => {
+  // `reason` só vem preenchido quando o logout NÃO foi um clique em "Sair"
+  // (ex: inatividade) — vira aviso na tela de login explicando o motivo.
+  const handleLogout = (reason?: string) => {
     if (sessionToken) {
       fetch('/api/auth/logout', {
         method: 'POST',
@@ -150,7 +157,42 @@ export default function App() {
     setUnidades(INITIAL_UNIDADES);
     setBaseCategories(INITIAL_BASE_CATEGORIES);
     setEstoqueItems([]);
+    // `onLogout` do Sidebar é ligado direto num onClick de botão — o clique
+    // manda o SyntheticEvent como primeiro argumento aqui, não `undefined`.
+    // Sem o typeof, isso viraria "reason" e tentaria renderizar um evento
+    // de clique como mensagem na tela de login.
+    setLoggedOutReason(typeof reason === 'string' ? reason : null);
   };
+
+  // Sessão fica aberta pra sempre enquanto a aba está ligada, mesmo sem
+  // ninguém usar o sistema de verdade — pedido explícito pra deslogar
+  // sozinho depois de um tempo parado (PC compartilhado, tela sem travar
+  // automaticamente, etc). 30min sem clique/tecla/scroll = desloga.
+  const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+  const lastActivityRef = React.useRef(Date.now());
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    lastActivityRef.current = Date.now();
+    const markActivity = () => {
+      lastActivityRef.current = Date.now();
+    };
+    const activityEvents: (keyof WindowEventMap)[] = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
+    activityEvents.forEach((ev) => window.addEventListener(ev, markActivity, { passive: true }));
+
+    const CHECK_INTERVAL_MS = 30 * 1000;
+    const interval = setInterval(() => {
+      if (Date.now() - lastActivityRef.current >= IDLE_TIMEOUT_MS) {
+        handleLogout('Sessão encerrada por inatividade. Faça login novamente.');
+      }
+    }, CHECK_INTERVAL_MS);
+
+    return () => {
+      activityEvents.forEach((ev) => window.removeEventListener(ev, markActivity));
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   const VALID_TABS: ActiveTab[] = ['dashboard', 'tabela', 'metas', 'notificacoes', 'asaas', 'bases', 'relatorios', 'usuarios', 'estoque', 'franqueados'];
   // Persiste a aba atual — sem isso, um F5 sempre voltava pro Dashboard,
@@ -932,6 +974,7 @@ export default function App() {
     return (
       <LoginView
         onLoginSuccess={handleLoginSuccess}
+        notice={loggedOutReason || undefined}
       />
     );
   }

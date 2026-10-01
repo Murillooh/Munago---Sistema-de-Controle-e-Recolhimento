@@ -5,6 +5,9 @@ import { motion, AnimatePresence } from 'motion/react';
 
 interface LoginViewProps {
   onLoginSuccess: (user: AuthUser, token: string | null) => void;
+  // Mostrado uma vez ao cair aqui (ex: logout automático por inatividade) —
+  // explica pro usuário por que ele voltou pra tela de login sem ter clicado "Sair".
+  notice?: string;
 }
 
 const slides = [
@@ -31,7 +34,7 @@ const slides = [
   }
 ];
 
-export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
+export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, notice }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -41,7 +44,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [infoMsg, setInfoMsg] = useState('');
+  const [infoMsg, setInfoMsg] = useState(notice || '');
 
   // Lógica do Carrossel
   const [currentSlide, setCurrentSlide] = useState(0);
