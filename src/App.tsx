@@ -735,12 +735,64 @@ export default function App() {
     .sort()
     .join(',');
 
+  // Status de lançamento vinculado ao ASAAS não é editável à mão na Planilha
+  // (StatusSelect fica travado pra item com asaasId) — esse ciclo é o que de
+  // fato mantém o status em dia, perguntando pro ASAAS o status real de cada
+  // pendência/atrasado ainda não paga. Mesma unidade/permissão do import
+  // automático; roda independente de qual aba tá aberta no momento.
+  const runAsaasStatusSync = async (cancelledRef?: { current: boolean }) => {
+    const unidadesComChave = unidades.filter((u: any) => {
+      if (!u.hasAsaasKey) return false;
+      if (currentUser?.role === 'admin' || currentUser?.allowedAsaasBases === null) return true;
+      return currentUser?.allowedAsaasBases?.includes(u.id);
+    });
+    if (unidadesComChave.length === 0) return;
+
+    const pendentes = itemsRef.current.filter(
+      (i) => i.asaasId && (i.status === 'Aguardando pagamento' || i.status === 'Atrasado')
+    );
+    if (pendentes.length === 0) return;
+
+    for (const item of pendentes) {
+      if (cancelledRef?.current) return;
+      const unidade = unidadesComChave.find(
+        (u: any) => u.nome.trim().toLowerCase() === item.franquia.trim().toLowerCase()
+      );
+      if (!unidade) continue;
+      try {
+        const res = await fetch('/api/asaas/get-payment-status', {
+          method: 'POST',
+          headers: itemsAuthHeaders(),
+          body: JSON.stringify({ unidadeId: unidade.id, sandbox: false, paymentId: item.asaasId }),
+        });
+        if (!res.ok) continue;
+        const data = await res.json();
+        const statusChanged = data.status && data.status !== item.status;
+        const linkMissing = !item.asaasInvoiceUrl && Boolean(data.invoiceUrl);
+        if (statusChanged || linkMissing) {
+          handleUpdateItem({
+            ...item,
+            status: data.status || item.status,
+            dataPagamento: data.paymentDate ? data.paymentDate.split('-').reverse().join('/') : item.dataPagamento,
+            asaasInvoiceUrl: data.invoiceUrl || item.asaasInvoiceUrl,
+          });
+        }
+      } catch (err) {
+        console.error('[ASAAS status sync]', item.id, '— falhou:', err);
+      }
+    }
+  };
+
   useEffect(() => {
     if (!isAuthenticated) return;
     const cancelledRef = { current: false };
 
-    runAsaasImport(cancelledRef);
-    const interval = setInterval(() => runAsaasImport(cancelledRef), ASAAS_AUTO_IMPORT_INTERVAL_MS);
+    const cycle = async () => {
+      await runAsaasImport(cancelledRef);
+      await runAsaasStatusSync(cancelledRef);
+    };
+    cycle();
+    const interval = setInterval(cycle, ASAAS_AUTO_IMPORT_INTERVAL_MS);
     return () => {
       cancelledRef.current = true;
       clearInterval(interval);

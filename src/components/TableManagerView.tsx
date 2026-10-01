@@ -209,7 +209,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
   };
 
   const handleSyncAsaas = async () => {
-    const pendingWithAsaas = items.filter(i => i.status === 'Aguardando pagamento' && i.asaasId);
+    const pendingWithAsaas = items.filter(i => (i.status === 'Aguardando pagamento' || i.status === 'Atrasado') && i.asaasId);
 
     if (pendingWithAsaas.length === 0) {
       showToast('error', 'Nenhuma cobrança pendente com vínculo ASAAS encontrada para sincronizar.');
@@ -1029,7 +1029,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
                     )}
                     {columnVisibility.status && (
                       <td className="py-2 px-4">
-                        <StatusSelect value={item.status} onChange={(status) => onUpdateItem({ ...item, status })} />
+                        <StatusSelect value={item.status} onChange={(status) => onUpdateItem({ ...item, status })} readOnly={Boolean(item.asaasId)} />
                       </td>
                     )}
                     {columnVisibility.competenciaRecolhimento && <td className="py-2 px-4 font-black uppercase text-slate-400 dark:text-slate-500 tracking-widest">{item.competenciaRecolhimento}</td>}

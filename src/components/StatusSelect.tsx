@@ -13,6 +13,10 @@ type Status = RecolhimentoItem['status'];
 interface StatusSelectProps {
   value: Status;
   onChange: (status: Status) => void;
+  // Lançamento vinculado ao ASAAS (tem asaasId) não pode ter status trocado
+  // à mão — o valor é sempre o que o ASAAS realmente diz (sincronizado em
+  // App.tsx), senão a Planilha mentiria sobre se o boleto foi pago de verdade.
+  readOnly?: boolean;
 }
 
 const STATUS_META: { value: Status; label: string; dot: string; text: string; bg: string; border: string }[] = [
@@ -22,7 +26,7 @@ const STATUS_META: { value: Status; label: string; dot: string; text: string; bg
   { value: 'Atrasado', label: 'Atrasado', dot: 'bg-rose-500', text: 'text-rose-700 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-900/20', border: 'border-rose-200 dark:border-rose-800/50' },
 ];
 
-export const StatusSelect: React.FC<StatusSelectProps> = ({ value, onChange }) => {
+export const StatusSelect: React.FC<StatusSelectProps> = ({ value, onChange, readOnly }) => {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -30,6 +34,17 @@ export const StatusSelect: React.FC<StatusSelectProps> = ({ value, onChange }) =
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
 
   const current = STATUS_META.find((s) => s.value === value) || STATUS_META[2];
+
+  if (readOnly) {
+    return (
+      <span
+        title="Status sincronizado automaticamente com o ASAAS"
+        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border ${current.bg} ${current.text} ${current.border}`}
+      >
+        {current.label}
+      </span>
+    );
+  }
 
   // Portal fora da árvore (mesma razão do DatePicker) — a célula da tabela
   // fica dentro de um contêiner com overflow-x-auto, que corta qualquer
