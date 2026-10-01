@@ -25,9 +25,11 @@ import { exportToExcel, exportToPDF } from './utils/exportImport';
 import { INITIAL_UNIDADES, INITIAL_BASE_CATEGORIES } from './data/initialBases';
 import { canAccessTab } from './utils/permissions';
 import { ASAAS_AUTO_IMPORT_INTERVAL_MS } from './utils/unidades';
+import { useAutoReloadOnNewVersion } from './utils/versionCheck';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
+  useAutoReloadOnNewVersion();
 
   useEffect(() => {
     const timer = setTimeout(() => {

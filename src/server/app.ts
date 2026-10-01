@@ -52,21 +52,51 @@ export async function createApp() {
   // velho eternamente ativo.
   const SESSION_TTL_DAYS = 30;
 
+  // Cache curto de sessão por instância — TODA rota autenticada consultava o
+  // banco só pra validar o token, então qualquer rajada de requisições
+  // (abas abertas em loop) virava rajada de conexões no RDS e esgotava os
+  // slots ("remaining connection slots are reserved"), derrubando o sistema
+  // inteiro. Logout/ações de admin limpam o cache desta instância; outras
+  // instâncias quentes enxergam a mudança em no máximo SESSION_CACHE_TTL_MS.
+  const SESSION_CACHE_TTL_MS = 20_000;
+  const sessionCache = new Map<string, { user: any; expiresAt: number }>();
+
+  app.use((req, _res, next) => {
+    if (req.method !== 'GET' && (req.path.startsWith('/api/admin') || req.path === '/api/auth/logout')) {
+      sessionCache.clear();
+    }
+    next();
+  });
+
   const getSessionUser = async (req: express.Request) => {
     const authHeader = req.headers.authorization || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
     if (!token || !pool) return null;
+    const cached = sessionCache.get(token);
+    if (cached && cached.expiresAt > Date.now()) return cached.user;
     const result = await pool.query(
       `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.token = $1 AND s.created_at > now() - ($2 * interval '1 day')`,
       [token, SESSION_TTL_DAYS]
     );
-    return result.rows[0] || null;
+    const user = result.rows[0] || null;
+    if (user) sessionCache.set(token, { user, expiresAt: Date.now() + SESSION_CACHE_TTL_MS });
+    else sessionCache.delete(token);
+    return user;
   };
 
+  // Express 4 não captura rejeição de middleware async — um erro de banco
+  // aqui (ex.: sem conexão livre) virava "Unhandled Rejection" e matava o
+  // processo da função inteira, levando junto as outras requisições dela.
   const requireAdmin = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (!pool) return res.status(503).json({ error: 'Banco de dados não configurado (defina DATABASE_URL).' });
-    const user = await getSessionUser(req);
+    let user;
+    try {
+      user = await getSessionUser(req);
+    } catch (err) {
+      console.error('[auth] Falha ao validar sessão:', err);
+      return res.status(503).json({ error: 'Banco de dados ocupado. Tente novamente em instantes.' });
+    }
     if (!user || user.role !== 'admin' || user.status !== 'approved') {
       return res.status(403).json({ error: 'Acesso restrito a administradores.' });
     }
@@ -78,7 +108,13 @@ export async function createApp() {
   // total de dados entre contas. Anexa o usuário logado em req.authUser.
   const requireAuth = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (!pool) return res.status(503).json({ error: 'Banco de dados não configurado (defina DATABASE_URL).' });
-    const user = await getSessionUser(req);
+    let user;
+    try {
+      user = await getSessionUser(req);
+    } catch (err) {
+      console.error('[auth] Falha ao validar sessão:', err);
+      return res.status(503).json({ error: 'Banco de dados ocupado. Tente novamente em instantes.' });
+    }
     if (!user || user.status !== 'approved') {
       return res.status(401).json({ error: 'Sessão inválida ou expirada. Faça login novamente.' });
     }
@@ -1416,7 +1452,19 @@ export async function createApp() {
   });
 
   // Get ASAAS Payment Status
-  app.post('/api/asaas/get-payment-status', requireAuth, async (req, res) => {
+  // Consulta unitária é a rota que já entrou em loop (dezenas de milhares
+  // de chamadas/hora) e esgotou o RDS — limite por sessão barra a rajada
+  // antes de tocar no banco. Uso legítimo (sincronia manual, visualizar
+  // boleto) fica bem abaixo disso.
+  const paymentStatusLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
+    keyGenerator: (req) => req.headers.authorization || req.ip || 'anon',
+    validate: false,
+    message: { error: 'Muitas consultas de status ao ASAAS. Aguarde um minuto.' },
+  });
+
+  app.post('/api/asaas/get-payment-status', paymentStatusLimiter, requireAuth, async (req, res) => {
     const { sandbox, paymentId } = req.body;
     const token = await getAsaasToken(req);
     if (!token) return res.status(400).json({ error: 'Chave API ASAAS obrigatória.' });

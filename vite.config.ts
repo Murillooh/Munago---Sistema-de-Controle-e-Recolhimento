@@ -64,9 +64,28 @@ function aistudioMediaPlugin(): Plugin {
 }
 // LINT.ThenChange(//depot/google3/java/com/google/alkali/boq/makersuite/applet_dev_service/templates/initializers/react_theme/vite.config.ts:aistudio_media_plugin)
 
+// Id único por build — vai embutido no bundle (__APP_BUILD_ID__) e num
+// /version.json servido sem cache. O front compara os dois de tempos em
+// tempos e recarrega sozinho quando sai deploy novo: aba esquecida aberta
+// numa versão antiga já ficou horas rodando código com bug (loop de
+// consultas ao ASAAS) e derrubou o banco mesmo depois da correção no ar.
+const BUILD_ID = process.env.VERCEL_GIT_COMMIT_SHA || `local-${Date.now()}`;
+
+function buildVersionPlugin(): Plugin {
+  return {
+    name: 'munago-build-version',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ buildId: BUILD_ID }) });
+    },
+  };
+}
+
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss(), aistudioMediaPlugin()],
+    define: {
+      __APP_BUILD_ID__: JSON.stringify(BUILD_ID),
+    },
+    plugins: [react(), tailwindcss(), aistudioMediaPlugin(), buildVersionPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
