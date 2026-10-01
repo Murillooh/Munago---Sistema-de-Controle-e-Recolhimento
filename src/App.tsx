@@ -665,7 +665,20 @@ export default function App() {
     // banco; foi isso que já estourou o limite de conexões do RDS e
     // derrubou a API inteira uma vez ("too many clients already").
     const newItems: RecolhimentoItem[] = [];
-    const existingAsaasIds = new Set(itemsRef.current.filter((i) => i.asaasId).map((i) => i.asaasId));
+    // Mapa por asaasId pra reconciliar status de quem JÁ existe, na mesma
+    // passada que já busca a lista paginada — antes isso era um ciclo à
+    // parte (runAsaasStatusSync) que consultava /get-payment-status UM POR
+    // UM pra cada pendência/atrasado; com histórico grande (centenas de
+    // boletos, o import agora traz TODO o período) e múltiplas abas/sessões
+    // abertas ao mesmo tempo, isso virou milhares de requisições em minutos
+    // e estourou o limite de conexões do RDS, derrubando a API inteira de
+    // novo. A lista paginada já traz o status atual de cada cobrança —
+    // reconciliar a partir dela é zero requisição extra.
+    const existingByAsaasId = new Map(
+      itemsRef.current.filter((i) => i.asaasId).map((i) => [i.asaasId as string, i])
+    );
+    const existingAsaasIds = new Set(existingByAsaasId.keys());
+    const statusUpdates: RecolhimentoItem[] = [];
 
     for (const unidade of unidadesComChave) {
       if (cancelledRef?.current) return { imported: 0 };
@@ -698,6 +711,20 @@ export default function App() {
 
         console.log('[ASAAS import]', unidade.nome, '—', payments.length, 'boleto(s) no total,', existingAsaasIds.size, 'já conhecido(s) até agora');
         for (const p of payments) {
+          const existing = existingByAsaasId.get(p.id);
+          if (existing) {
+            const statusChanged = p.status && p.status !== existing.status;
+            const linkMissing = !existing.asaasInvoiceUrl && Boolean(p.invoiceUrl);
+            if (statusChanged || linkMissing) {
+              statusUpdates.push({
+                ...existing,
+                status: p.status || existing.status,
+                dataPagamento: p.paymentDate ? p.paymentDate.split('-').reverse().join('/') : existing.dataPagamento,
+                asaasInvoiceUrl: p.invoiceUrl || existing.asaasInvoiceUrl,
+              });
+            }
+            continue;
+          }
           if (existingAsaasIds.has(p.id)) continue;
           newItems.push(mapAsaasPaymentToItem(unidade, p));
           existingAsaasIds.add(p.id);
@@ -706,6 +733,11 @@ export default function App() {
         // Chave com problema momentâneo ou API fora do ar — tenta de novo no próximo ciclo.
         console.error('[ASAAS import]', unidade.nome, '— falhou:', err);
       }
+    }
+
+    if (statusUpdates.length > 0) {
+      console.log('[ASAAS import]', statusUpdates.length, 'status reconciliado(s)');
+      for (const item of statusUpdates) handleUpdateItem(item);
     }
 
     console.log('[ASAAS import] ciclo terminado —', newItems.length, 'novo(s) item(ns) pra gravar');
@@ -737,63 +769,15 @@ export default function App() {
     .join(',');
 
   // Status de lançamento vinculado ao ASAAS não é editável à mão na Planilha
-  // (StatusSelect fica travado pra item com asaasId) — esse ciclo é o que de
-  // fato mantém o status em dia, perguntando pro ASAAS o status real de cada
-  // pendência/atrasado ainda não paga. Mesma unidade/permissão do import
-  // automático; roda independente de qual aba tá aberta no momento.
-  const runAsaasStatusSync = async (cancelledRef?: { current: boolean }) => {
-    const unidadesComChave = unidades.filter((u: any) => {
-      if (!u.hasAsaasKey) return false;
-      if (currentUser?.role === 'admin' || currentUser?.allowedAsaasBases === null) return true;
-      return currentUser?.allowedAsaasBases?.includes(u.id);
-    });
-    if (unidadesComChave.length === 0) return;
-
-    const pendentes = itemsRef.current.filter(
-      (i) => i.asaasId && (i.status === 'Aguardando pagamento' || i.status === 'Atrasado')
-    );
-    if (pendentes.length === 0) return;
-
-    for (const item of pendentes) {
-      if (cancelledRef?.current) return;
-      const unidade = unidadesComChave.find(
-        (u: any) => u.nome.trim().toLowerCase() === item.franquia.trim().toLowerCase()
-      );
-      if (!unidade) continue;
-      try {
-        const res = await fetch('/api/asaas/get-payment-status', {
-          method: 'POST',
-          headers: itemsAuthHeaders(),
-          body: JSON.stringify({ unidadeId: unidade.id, sandbox: false, paymentId: item.asaasId }),
-        });
-        if (!res.ok) continue;
-        const data = await res.json();
-        const statusChanged = data.status && data.status !== item.status;
-        const linkMissing = !item.asaasInvoiceUrl && Boolean(data.invoiceUrl);
-        if (statusChanged || linkMissing) {
-          handleUpdateItem({
-            ...item,
-            status: data.status || item.status,
-            dataPagamento: data.paymentDate ? data.paymentDate.split('-').reverse().join('/') : item.dataPagamento,
-            asaasInvoiceUrl: data.invoiceUrl || item.asaasInvoiceUrl,
-          });
-        }
-      } catch (err) {
-        console.error('[ASAAS status sync]', item.id, '— falhou:', err);
-      }
-    }
-  };
-
+  // (StatusSelect fica travado pra item com asaasId) — quem mantém o status
+  // em dia é a reconciliação dentro do próprio runAsaasImport (usa a lista
+  // paginada que ele já busca, não dispara requisição por item).
   useEffect(() => {
     if (!isAuthenticated) return;
     const cancelledRef = { current: false };
 
-    const cycle = async () => {
-      await runAsaasImport(cancelledRef);
-      await runAsaasStatusSync(cancelledRef);
-    };
-    cycle();
-    const interval = setInterval(cycle, ASAAS_AUTO_IMPORT_INTERVAL_MS);
+    runAsaasImport(cancelledRef);
+    const interval = setInterval(() => runAsaasImport(cancelledRef), ASAAS_AUTO_IMPORT_INTERVAL_MS);
     return () => {
       cancelledRef.current = true;
       clearInterval(interval);
