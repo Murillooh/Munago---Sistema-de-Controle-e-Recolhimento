@@ -769,28 +769,33 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
       {/* Filters Bar - Modernized */}
       <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm p-4 rounded-xl border border-slate-200/80 dark:border-slate-800/60 shadow-sm space-y-4 transition-all">
         <div className="flex flex-col lg:flex-row gap-3">
-          {/* Enhanced Search Input */}
-          <div className="relative flex-1 group">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-            <input
-              type="text"
-              placeholder="Buscar por franquia, CNPJ, categoria ou descrição..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/40 rounded-xl text-sm placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400/50 transition-all shadow-sm outline-none hover:bg-slate-100/80 dark:hover:bg-slate-800/50 text-slate-900 dark:text-slate-100"
-            />
-          </div>
-
-          {/* Grid Filters */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
-            <div className="flex gap-2">
-              <div className="min-w-0 flex-1">
-                <DatePicker value={startDate} onChange={setStartDate} title="Data Inicial" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <DatePicker value={endDate} onChange={setEndDate} title="Data Final" />
-              </div>
+          {/* Todas as caixas do mesmo tamanho — antes a busca ficava livre
+              (flex-1) e as duas datas dividiam uma célula só do grid, saindo
+              bem mais estreitas que os três selects ao lado. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 flex-1">
+            <div className="relative group">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+              <input
+                type="text"
+                placeholder="Buscar por franquia, CNPJ, categoria ou descrição..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-slate-50/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/40 rounded-xl text-sm placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400/50 transition-all shadow-sm outline-none hover:bg-slate-100/80 dark:hover:bg-slate-800/50 text-slate-900 dark:text-slate-100"
+              />
             </div>
+
+            <DatePicker
+              value={startDate}
+              onChange={setStartDate}
+              title="Data Inicial"
+              className="w-full flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-[11px] font-bold text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-blue-500 outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors"
+            />
+            <DatePicker
+              value={endDate}
+              onChange={setEndDate}
+              title="Data Final"
+              className="w-full flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-[11px] font-bold text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-blue-500 outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors"
+            />
 
             <select
               value={statusFilter}
