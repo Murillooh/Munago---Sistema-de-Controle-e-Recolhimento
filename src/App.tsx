@@ -1037,32 +1037,32 @@ export default function App() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 h-full">
         {/* Top Header Bar for Mobile Toggle & Quick Actions - Compact */}
-        <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-800/40 sticky top-0 z-20 px-4 sm:px-6 h-12 flex items-center justify-between shadow-sm transition-colors">
-          <div className="flex items-center space-x-3">
+        <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-800/40 sticky top-0 z-20 px-4 sm:px-6 h-12 flex items-center justify-between gap-4 shadow-sm transition-colors">
+          {/* Título + busca agrupados — antes a busca vivia numa célula
+              flex-1 própria entre o título e os botões, abrindo um vão vazio
+              enorme no meio quando a tela é larga. Agora os dois ficam
+              juntos à esquerda, crescendo como um bloco só. */}
+          <div className="flex items-center gap-4 flex-1 min-w-0">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-1.5 rounded-lg bg-slate-100/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 hover:shadow-sm"
+              className="md:hidden p-1.5 rounded-lg bg-slate-100/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 hover:shadow-sm shrink-0"
             >
               <Menu className="w-4 h-4" />
             </button>
-            <div>
-              <h2 className="text-[11px] font-black text-slate-900 dark:text-slate-100 uppercase tracking-widest flex items-center">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-2 glow-pulse hidden sm:inline-block"></span>
-                {activeTab === 'dashboard' && 'Dashboard'}
-                {activeTab === 'tabela' && 'Planilha'}
-                {activeTab === 'metas' && 'Metas'}
-                {activeTab === 'notificacoes' && 'Notificações'}
-                {activeTab === 'asaas' && 'Integração ASAAS'}
-                {activeTab === 'franqueados' && 'Franqueados'}
-                {activeTab === 'bases' && 'Gestão de Bases'}
-                {activeTab === 'relatorios' && 'Relatórios'}
-                {activeTab === 'usuarios' && 'Usuários'}
-              </h2>
-            </div>
-          </div>
+            <h2 className="text-[11px] font-black text-slate-900 dark:text-slate-100 uppercase tracking-widest flex items-center shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-2 glow-pulse hidden sm:inline-block"></span>
+              {activeTab === 'dashboard' && 'Dashboard'}
+              {activeTab === 'tabela' && 'Planilha'}
+              {activeTab === 'metas' && 'Metas'}
+              {activeTab === 'notificacoes' && 'Notificações'}
+              {activeTab === 'asaas' && 'Integração ASAAS'}
+              {activeTab === 'franqueados' && 'Franqueados'}
+              {activeTab === 'bases' && 'Gestão de Bases'}
+              {activeTab === 'relatorios' && 'Relatórios'}
+              {activeTab === 'usuarios' && 'Usuários'}
+            </h2>
 
-          <div className="flex-1 max-w-sm mx-4">
-            <div className="relative group">
+            <div className="relative group w-full max-w-md">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
               <input
                 id="global-search-input"
@@ -1075,7 +1075,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center space-x-1.5">
+          <div className="flex items-center space-x-1.5 shrink-0">
             <div className="h-6 w-px bg-slate-200/80 dark:bg-slate-800/80 mx-1 hidden sm:block"></div>
 
             <button
