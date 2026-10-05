@@ -1,15 +1,16 @@
 import React from 'react';
 import { motion } from 'motion/react';
 
-// Mesmo ícone/gradiente dourado do MunagoLogo (usado no app, no favicon e
-// no cabeçalho do PDF) — antes o preload usava um spinner azul genérico
-// sem nenhuma identidade da marca.
+// Ícone dourado = marca (mesmo do MunagoLogo da sidebar); o resto (fundo,
+// halos, barra) segue o visual do app — fundo slate claro/escuro e o
+// gradiente azul→índigo dos botões e da navegação — pra transição do
+// preload pro sistema não parecer outra tela.
 export const PreloadView = () => {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07070a] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/40 to-indigo-50/30 dark:bg-slate-950 dark:bg-none overflow-hidden">
       {/* Halos de fundo — mesmo clima da capa escura do PDF/relatório */}
-      <div className="absolute -top-24 -left-16 w-80 h-80 bg-[#d4a017]/10 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute -bottom-24 -right-16 w-80 h-80 bg-[#d4a017]/10 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute -top-24 -left-16 w-80 h-80 bg-blue-500/10 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute -bottom-24 -right-16 w-80 h-80 bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none" />
 
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
@@ -52,30 +53,23 @@ export const PreloadView = () => {
           </motion.svg>
         </div>
 
-        <h1
-          className="text-3xl font-black tracking-tight leading-none"
-          style={{
-            background: 'linear-gradient(90deg, #f2ca5c, #d4a017, #a3760a)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-          }}
-        >
+        <h1 className="text-3xl font-black tracking-tight leading-none text-slate-900 dark:text-white">
           Munago
         </h1>
-        <p className="text-[10px] font-bold tracking-[0.2em] uppercase mt-1.5" style={{ color: '#d4a017' }}>
+        <p className="text-[10px] font-bold tracking-[0.2em] uppercase mt-1.5 text-blue-600 dark:text-blue-400">
           Sistema de Controle e Recolhimento
         </p>
 
         {/* Barra de progresso indeterminada — mais viva que só um texto parado */}
-        <div className="relative w-40 h-1 mt-7 rounded-full overflow-hidden bg-white/10">
+        <div className="relative w-40 h-1 mt-7 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-800">
           <motion.div
             className="absolute inset-y-0 w-1/3 rounded-full"
-            style={{ background: 'linear-gradient(90deg, transparent, #f2ca5c, #d4a017, transparent)' }}
+            style={{ background: 'linear-gradient(90deg, transparent, #2563eb, #4f46e5, transparent)' }}
             animate={{ left: ['-35%', '100%'] }}
             transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
           />
         </div>
-        <p className="text-[9px] font-semibold text-[#6b6558] mt-3 tracking-[0.15em] uppercase">
+        <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 mt-3 tracking-[0.15em] uppercase">
           Carregando sistema...
         </p>
       </motion.div>

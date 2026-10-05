@@ -20,7 +20,7 @@ import { BrowserNotifications } from './components/BrowserNotifications';
 import { ChatAssistant } from './components/ChatAssistant';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { motion } from 'motion/react';
-import { Menu, Bell, Download, FileText, Plus, Sun, Moon, HelpCircle, Database, FileBarChart, Search, Undo2, RefreshCw, X } from 'lucide-react';
+import { Menu, Bell, Download, FileText, Plus, Sun, Moon, HelpCircle, Database, FileBarChart, Search, Undo2 } from 'lucide-react';
 import { exportToExcel, exportToPDF } from './utils/exportImport';
 import { INITIAL_UNIDADES, INITIAL_BASE_CATEGORIES } from './data/initialBases';
 import { canAccessTab } from './utils/permissions';
@@ -1032,6 +1032,9 @@ export default function App() {
         setIsOpen={setSidebarOpen}
         onLogout={handleLogout}
         currentUser={currentUser}
+        updateAvailable={newVersion.updateAvailable}
+        onUpdateNow={newVersion.reloadNow}
+        onDismissUpdate={newVersion.dismiss}
       />
 
       {/* Main Content Area */}
@@ -1194,35 +1197,6 @@ export default function App() {
         </main>
       </div>
       <ChatAssistant items={items} estoqueItems={estoqueItems} goalSettings={goalSettings} sessionToken={sessionToken} />
-      {newVersion.updateAvailable && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed top-4 left-1/2 -translate-x-1/2 z-[80] w-[calc(100%-2rem)] max-w-md flex items-center gap-3 bg-slate-900 dark:bg-slate-800 text-white pl-4 pr-2 py-2.5 rounded-2xl shadow-2xl border border-white/10"
-        >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15">
-            <RefreshCw className="w-4 h-4 text-emerald-400" aria-hidden="true" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold">Nova versão do Munago disponível</p>
-            <p className="text-[10px] text-slate-400">Atualize quando terminar o que está fazendo.</p>
-          </div>
-          <button
-            onClick={newVersion.reloadNow}
-            className="shrink-0 bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors active:scale-[0.98]"
-          >
-            Atualizar
-          </button>
-          <button
-            onClick={newVersion.dismiss}
-            aria-label="Lembrar depois"
-            title="Lembrar depois"
-            className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
       {undoState && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-3 bg-slate-900 dark:bg-slate-800 text-white pl-4 pr-2 py-2 rounded-2xl shadow-2xl border border-white/10">
           <span className="text-xs font-bold">

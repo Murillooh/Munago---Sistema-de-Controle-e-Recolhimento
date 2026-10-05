@@ -25,6 +25,7 @@ import {
   X,
   Boxes,
   Store,
+  RefreshCw,
 } from 'lucide-react';
 import { exportToExcel, exportToPDF } from '../utils/exportImport';
 import { canAccessTab } from '../utils/permissions';
@@ -45,6 +46,10 @@ interface SidebarProps {
   setIsOpen: (open: boolean) => void;
   onLogout: () => void;
   currentUser: AuthUser | null;
+  // Deploy novo detectado com a página aberta (ver useNewVersionCheck).
+  updateAvailable?: boolean;
+  onUpdateNow?: () => void;
+  onDismissUpdate?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -57,6 +62,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setIsOpen,
   onLogout,
   currentUser,
+  updateAvailable,
+  onUpdateNow,
+  onDismissUpdate,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
@@ -338,6 +346,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* User Footer - Compact */}
         <div className={`p-3 border-t border-slate-200/60 dark:border-slate-800/40 bg-gradient-to-t from-slate-100/80 to-slate-50/40 dark:from-slate-950/60 dark:to-slate-900/30 flex flex-col space-y-3`}>
+          {updateAvailable && (
+            isCollapsed ? (
+              <button
+                onClick={onUpdateNow}
+                title="Nova versão disponível — clique para atualizar"
+                aria-label="Nova versão disponível — atualizar"
+                className="relative w-full flex items-center justify-center p-2.5 rounded-xl text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" />
+              </button>
+            ) : (
+              <div role="status" aria-live="polite" className="relative p-3 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20">
+                <button
+                  onClick={onDismissUpdate}
+                  aria-label="Lembrar depois"
+                  title="Lembrar depois"
+                  className="absolute top-2 right-2 p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+                <div className="flex items-start gap-2.5 pr-5">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15">
+                    <RefreshCw className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold text-slate-900 dark:text-white leading-tight">Nova versão disponível</p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">Atualize quando terminar o que está fazendo.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={onUpdateNow}
+                  className="mt-2.5 w-full bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors active:scale-[0.98]"
+                >
+                  Atualizar
+                </button>
+              </div>
+            )
+          )}
+
           <button
             onClick={() => setShowSupportModal(true)}
             className={`w-full flex items-center rounded-xl transition-all duration-200 ${
