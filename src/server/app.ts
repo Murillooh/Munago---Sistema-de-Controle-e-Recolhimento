@@ -3,6 +3,7 @@ import express from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
 import { GoogleGenAI } from '@google/genai';
 import { pool, initDb, rowToItem, rowToUser, rowToEstoqueItem, rowToUnidade } from './db.js';
 import { configureWebPush, getVapidPublicKey, sendPushToUser, runDeadlineAlertCheck } from './push.js';
@@ -19,6 +20,9 @@ export async function createApp() {
   // longa passa fácil disso e a requisição inteira é rejeitada (413) antes
   // de chegar em qualquer rota. 15mb cobre até importações bem grandes.
   app.use(express.json({ limit: '15mb' }));
+  // CSP fica desligada de propósito: o front carrega scripts/estilos/fontes
+  // de várias origens e uma CSP apertada sem testar quebra a tela inteira.
+  app.use(helmet({ contentSecurityPolicy: false }));
 
   await initDb();
   configureWebPush();
@@ -44,6 +48,12 @@ export async function createApp() {
     windowMs: 15 * 60 * 1000,
     max: 15,
     message: { error: 'Muitas tentativas de login. Tente novamente mais tarde.' }
+  });
+
+  const registerLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    message: { error: 'Muitos cadastros deste endereço. Tente novamente mais tarde.' }
   });
 
   // Sessão nunca expirava antes disso — um token vazado ou esquecido num
@@ -122,7 +132,7 @@ export async function createApp() {
     next();
   };
 
-  app.post('/api/auth/register', requireDb, async (req, res) => {
+  app.post('/api/auth/register', requireDb, registerLimiter, async (req, res) => {
     try {
       const { name, email, password } = req.body || {};
       if (!name || !email || !password || String(password).length < 6) {
