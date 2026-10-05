@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, ShieldCheck, Eye, EyeOff, Building2, CheckCircle2, Cpu, Globe2, LineChart } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Eye, EyeOff, Building2, CheckCircle2, Cpu, Globe2, LineChart, Receipt, Bell, FileText, Boxes } from 'lucide-react';
 import { AuthUser } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -140,7 +140,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, notice }) 
         </div>
 
         {/* Carrossel Deslizante */}
-        <div className="relative z-10 h-[300px] flex items-center">
+        <div className="relative z-10 flex flex-col gap-10">
+        <div className="flex items-center min-h-[200px]">
           <AnimatePresence mode="wait">
             <motion.div
               key={currentSlide}
@@ -163,6 +164,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, notice }) 
               </p>
             </motion.div>
           </AnimatePresence>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 max-w-xl">
+          {[
+            { icon: <Receipt className="w-4 h-4" />, title: 'Cobranças ASAAS', desc: 'Boleto e Pix direto da conta de cada franquia.' },
+            { icon: <Bell className="w-4 h-4" />, title: 'Alertas de prazo', desc: 'Push no navegador antes do vencimento.' },
+            { icon: <FileText className="w-4 h-4" />, title: 'Relatórios', desc: 'PDF e Excel com os filtros que você escolher.' },
+            { icon: <Boxes className="w-4 h-4" />, title: 'Controle de estoque', desc: 'Inventário físico com diferença por peça.' },
+          ].map((f) => (
+            <div key={f.title} className="rounded-2xl border border-zinc-800 bg-zinc-900/50 backdrop-blur-sm p-4 hover:border-zinc-700 transition-colors">
+              <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-zinc-800 text-blue-400 mb-3">{f.icon}</div>
+              <p className="text-[13px] font-semibold text-zinc-100">{f.title}</p>
+              <p className="text-[12px] text-zinc-500 leading-relaxed mt-1">{f.desc}</p>
+            </div>
+          ))}
+        </div>
         </div>
 
         {/* Footer Esquerda e Controles do Carrossel */}
