@@ -308,7 +308,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, notice }) 
               <div className="relative">
                 <input
                   required
-                  minLength={mode === 'register' ? 6 : undefined}
+                  minLength={mode === 'register' ? 8 : undefined}
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
@@ -331,7 +331,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, notice }) 
                   <div className="relative">
                     <input
                       required
-                      minLength={6}
+                      minLength={8}
                       type={showConfirmPassword ? 'text' : 'password'}
                       value={confirmPassword}
                       onChange={e => setConfirmPassword(e.target.value)}

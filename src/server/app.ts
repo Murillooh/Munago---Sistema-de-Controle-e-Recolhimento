@@ -135,8 +135,8 @@ export async function createApp() {
   app.post('/api/auth/register', requireDb, registerLimiter, async (req, res) => {
     try {
       const { name, email, password } = req.body || {};
-      if (!name || !email || !password || String(password).length < 6) {
-        return res.status(400).json({ error: 'Nome, e-mail e senha (mín. 6 caracteres) são obrigatórios.' });
+      if (!name || !email || !password || String(password).length < 8) {
+        return res.status(400).json({ error: 'Nome, e-mail e senha (mín. 8 caracteres) são obrigatórios.' });
       }
 
       const normalizedEmail = String(email).trim().toLowerCase();
