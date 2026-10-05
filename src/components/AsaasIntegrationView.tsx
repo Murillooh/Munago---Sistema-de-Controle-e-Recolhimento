@@ -232,10 +232,16 @@ export const AsaasIntegrationView: React.FC<AsaasIntegrationViewProps> = ({ item
       }
       const invoiceUrl = data.invoiceUrl || fallback;
       if (data.bankSlipUrl) {
+        const ticketRes = await fetch('/api/asaas/boleto-ticket', { method: 'POST', headers: asaasAuthHeaders() });
+        const ticketData = await ticketRes.json().catch(() => ({}));
+        if (!ticketRes.ok) {
+          setBoletoViewer({ title: item.franquia, loading: false, error: ticketData.error || 'Falha ao gerar link do boleto.', fallbackUrl: invoiceUrl });
+          return;
+        }
         setBoletoViewer({
           title: item.franquia,
           loading: false,
-          url: `/api/asaas/boleto-pdf?url=${encodeURIComponent(data.bankSlipUrl)}&token=${encodeURIComponent(sessionToken || '')}`,
+          url: `/api/asaas/boleto-pdf?url=${encodeURIComponent(data.bankSlipUrl)}&ticket=${encodeURIComponent(ticketData.ticket)}`,
           fallbackUrl: invoiceUrl,
         });
       } else {

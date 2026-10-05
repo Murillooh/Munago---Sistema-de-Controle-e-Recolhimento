@@ -266,6 +266,14 @@ export function initDb(): Promise<void> {
         alert_date DATE NOT NULL,
         PRIMARY KEY (item_id, alert_date)
       );
+
+      -- Ticket de vida curta pro iframe do boleto (ver /api/asaas/boleto-ticket).
+      -- Substitui mandar o token de sessão inteiro na URL, que ia parar em log.
+      CREATE TABLE IF NOT EXISTS boleto_tickets (
+        token TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        expires_at TIMESTAMPTZ NOT NULL
+      );
     `).then(() => undefined);
   }
   return initPromise;

@@ -1422,19 +1422,30 @@ export async function createApp() {
   // nenhum visível em JS). Buscando o PDF aqui no servidor e servindo com
   // nosso próprio domínio, o iframe passa a carregar same-origin — o
   // X-Frame-Options do ASAAS nunca chega até o navegador do usuário.
+  // Iframe não manda header Authorization, então o login entra via ticket de
+  // vida curta (5min) gerado por rota autenticada — nunca o token de sessão.
+  app.post('/api/asaas/boleto-ticket', requireDb, requireAuth, async (req, res) => {
+    try {
+      const ticket = crypto.randomBytes(32).toString('hex');
+      await pool!.query(`DELETE FROM boleto_tickets WHERE expires_at < now()`);
+      await pool!.query(
+        `INSERT INTO boleto_tickets (token, user_id, expires_at) VALUES ($1, $2, now() + interval '5 minutes')`,
+        [ticket, (req as any).authUser.id]
+      );
+      res.json({ ticket });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao gerar link do boleto.', details: err.message });
+    }
+  });
+
   app.get('/api/asaas/boleto-pdf', async (req, res) => {
-    // Rota carregada direto num <iframe src>, então não dá pra mandar
-    // header Authorization (navegação simples de GET não aceita header
-    // customizado) — token de sessão vem por query string aqui, e só
-    // aqui, pra rota continuar exigindo login sem quebrar o iframe.
     if (!pool) return res.status(503).json({ error: 'Banco de dados não configurado (defina DATABASE_URL).' });
-    const sessionCheck = await pool.query(
-      `SELECT u.id FROM sessions s JOIN users u ON u.id = s.user_id
-       WHERE s.token = $1 AND u.status = 'approved' AND s.created_at > now() - ($2 * interval '1 day')`,
-      [String(req.query.token || ''), SESSION_TTL_DAYS]
+    const ticketCheck = await pool.query(
+      `SELECT 1 FROM boleto_tickets WHERE token = $1 AND expires_at > now()`,
+      [String(req.query.ticket || '')]
     );
-    if (!sessionCheck.rows[0]) {
-      return res.status(401).json({ error: 'Sessão inválida ou expirada. Faça login novamente.' });
+    if (!ticketCheck.rows[0]) {
+      return res.status(401).json({ error: 'Link do boleto expirado. Abra o boleto de novo.' });
     }
 
     const rawUrl = String(req.query.url || '');
