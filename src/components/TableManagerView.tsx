@@ -656,7 +656,7 @@ export const TableManagerView = forwardRef<any, TableManagerViewProps>(function 
       {/* Top Header & Actions - Compact */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div>
-          <h2 className="text-lg font-black text-slate-900 dark:text-slate-100 tracking-tight">Gerenciador de Planilha</h2>
+          <h2 className="text-lg font-black text-slate-900 dark:text-slate-100 tracking-tight">Gerenciador de Boletos</h2>
           <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Gestão diária de recolhimentos e exportação de dados.</p>
         </div>
 
