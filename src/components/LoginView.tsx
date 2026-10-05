@@ -116,7 +116,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, notice }) 
   };
 
   return (
-    <div className="flex h-screen w-full bg-[#09090b] text-zinc-100 font-sans selection:bg-white/20 overflow-hidden">
+    <div className="flex h-screen w-full bg-slate-950 text-zinc-100 font-sans selection:bg-white/20 overflow-hidden">
       
       {/* ----------------- LADO ESQUERDO (VISUAL ANIMADO) ----------------- */}
       <div className="hidden lg:flex relative w-[55%] h-full flex-col justify-between overflow-hidden p-12 bg-zinc-950 border-r border-zinc-900">
@@ -184,10 +184,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, notice }) 
       </div>
 
       {/* ----------------- LADO DIREITO (FORMULÁRIO ESTRUTURADO) ----------------- */}
-      <div className="relative flex-1 flex flex-col items-center justify-center p-6 sm:p-12 bg-[#050505] overflow-hidden">
+      <div className="relative flex-1 flex flex-col items-center justify-center p-6 sm:p-12 bg-slate-950 overflow-hidden">
         
         {/* Elementos coloridos no fundo para dar vida ao efeito de ESPELHO / VIDRO */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#d4a017]/15 blur-[120px] rounded-full mix-blend-screen pointer-events-none" />
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-600/15 blur-[120px] rounded-full mix-blend-screen pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-blue-600/10 blur-[150px] rounded-full mix-blend-screen pointer-events-none" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-white/5 blur-[100px] rounded-full pointer-events-none" />
 
@@ -199,12 +199,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, notice }) 
         >
           {/* Logo Centralizado */}
           <div className="flex flex-col items-center gap-4 mb-8">
-            <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-[#f2ca5c] to-[#a3760a] shadow-lg shadow-amber-500/20 text-[#030305]">
+            <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-600/25 text-white">
               <Building2 className="w-7 h-7" />
             </div>
             <div className="text-center">
               <h1 className="text-2xl font-bold tracking-tight text-white">Munago</h1>
-              <p className="text-[10px] font-semibold tracking-[0.2em] text-[#d4a017] uppercase mt-1">Sistema de Controle</p>
+              <p className="text-[10px] font-semibold tracking-[0.2em] text-blue-400 uppercase mt-1">Sistema de Controle</p>
             </div>
           </div>
 
@@ -258,7 +258,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, notice }) 
                     type="text" 
                     value={name} 
                     onChange={e => setName(e.target.value)} 
-                    className="w-full h-12 rounded-xl bg-black/20 border border-white/10 px-4 text-[14px] text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-[#d4a017] focus:bg-black/40 focus:ring-1 focus:ring-[#d4a017] transition-all" 
+                    className="w-full h-12 rounded-xl bg-black/20 border border-white/10 px-4 text-[14px] text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-500 focus:bg-black/40 focus:ring-1 focus:ring-blue-500 transition-all" 
                     placeholder="Seu nome" 
                   />
                 </div>
@@ -273,7 +273,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, notice }) 
                   type="email" 
                   value={email} 
                   onChange={e => setEmail(e.target.value)} 
-                  className="w-full h-12 rounded-xl bg-black/20 border border-white/10 px-4 text-[14px] text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-[#d4a017] focus:bg-black/40 focus:ring-1 focus:ring-[#d4a017] transition-all" 
+                  className="w-full h-12 rounded-xl bg-black/20 border border-white/10 px-4 text-[14px] text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-500 focus:bg-black/40 focus:ring-1 focus:ring-blue-500 transition-all" 
                   placeholder="nome@empresa.com" 
                 />
               </div>
@@ -283,7 +283,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, notice }) 
               <div className="flex justify-between items-baseline">
                 <label className="block text-[13px] font-medium text-zinc-300">Senha</label>
                 {mode === 'login' && (
-                  <button type="button" className="text-[12px] font-medium text-[#d4a017] hover:text-[#f2ca5c] transition-colors">
+                  <button type="button" className="text-[12px] font-medium text-blue-400 hover:text-blue-300 transition-colors">
                     Esqueceu a senha?
                   </button>
                 )}
@@ -295,7 +295,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, notice }) 
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full h-12 rounded-xl bg-black/20 border border-white/10 pl-4 pr-11 text-[14px] text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-[#d4a017] focus:bg-black/40 focus:ring-1 focus:ring-[#d4a017] transition-all"
+                  className="w-full h-12 rounded-xl bg-black/20 border border-white/10 pl-4 pr-11 text-[14px] text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-500 focus:bg-black/40 focus:ring-1 focus:ring-blue-500 transition-all"
                   placeholder="••••••••"
                 />
                 <button
@@ -318,7 +318,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, notice }) 
                       type={showConfirmPassword ? 'text' : 'password'}
                       value={confirmPassword}
                       onChange={e => setConfirmPassword(e.target.value)}
-                      className="w-full h-12 rounded-xl bg-black/20 border border-white/10 pl-4 pr-11 text-[14px] text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-[#d4a017] focus:bg-black/40 focus:ring-1 focus:ring-[#d4a017] transition-all"
+                      className="w-full h-12 rounded-xl bg-black/20 border border-white/10 pl-4 pr-11 text-[14px] text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-500 focus:bg-black/40 focus:ring-1 focus:ring-blue-500 transition-all"
                       placeholder="••••••••"
                     />
                     <button
@@ -338,7 +338,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, notice }) 
               <button 
                 type="submit" 
                 disabled={loading} 
-                className="w-full h-12 rounded-xl bg-gradient-to-r from-[#d4a017] to-[#a3760a] text-white flex items-center justify-center gap-2 font-bold text-[14px] tracking-wide disabled:opacity-50 hover:from-[#f2ca5c] hover:to-[#d4a017] shadow-lg shadow-amber-500/20 transition-all active:scale-[0.98]"
+                className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex items-center justify-center gap-2 font-bold text-[14px] tracking-wide disabled:opacity-50 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-600/25 transition-all active:scale-[0.98]"
               >
                 {loading ? (
                   <span className="flex items-center gap-2">

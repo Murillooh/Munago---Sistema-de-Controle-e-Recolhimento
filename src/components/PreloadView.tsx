@@ -1,10 +1,9 @@
 import React from 'react';
 import { motion } from 'motion/react';
 
-// Ícone dourado = marca (mesmo do MunagoLogo da sidebar); o resto (fundo,
-// halos, barra) segue o visual do app — fundo slate claro/escuro e o
-// gradiente azul→índigo dos botões e da navegação — pra transição do
-// preload pro sistema não parecer outra tela.
+// Mesmo ícone do MunagoLogo (sidebar) e mesmo visual do app — fundo slate
+// claro/escuro e o gradiente azul→índigo dos botões e da navegação — pra
+// transição do preload pro sistema não parecer outra tela.
 export const PreloadView = () => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/40 to-indigo-50/30 dark:bg-slate-950 dark:bg-none overflow-hidden">
@@ -24,7 +23,7 @@ export const PreloadView = () => {
             animate={{ scale: [1, 1.35, 1], opacity: [0.35, 0, 0.35] }}
             transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
             className="absolute inset-0 rounded-full"
-            style={{ background: 'radial-gradient(circle, #f2ca5c 0%, transparent 70%)' }}
+            style={{ background: 'radial-gradient(circle, #3b82f6 0%, transparent 70%)' }}
           />
           <motion.svg
             animate={{ scale: [1, 1.06, 1] }}
@@ -35,9 +34,9 @@ export const PreloadView = () => {
           >
             <defs>
               <linearGradient id="preload-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#f2ca5c" />
-                <stop offset="50%" stopColor="#d4a017" />
-                <stop offset="100%" stopColor="#a3760a" />
+                <stop offset="0%" stopColor="#3b82f6" />
+                <stop offset="50%" stopColor="#2563eb" />
+                <stop offset="100%" stopColor="#4f46e5" />
               </linearGradient>
             </defs>
             <circle cx="120" cy="100" r="36" fill="url(#preload-grad)" />
@@ -45,7 +44,7 @@ export const PreloadView = () => {
             <path
               d="M103,100 L115,112 L139,84"
               fill="none"
-              stroke="#0a0a0a"
+              stroke="#ffffff"
               strokeWidth="9"
               strokeLinecap="round"
               strokeLinejoin="round"
