@@ -1,7 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { RecolhimentoItem, GoalSettings } from '../types';
-import { Bell, Clock, AlertTriangle, CheckCircle2, ShieldAlert, BellRing, Info, XCircle, Loader2 } from 'lucide-react';
-import { ensurePushSubscription } from '../utils/push';
+import { Bell, Clock, AlertTriangle, CheckCircle2, ShieldAlert, BellRing, BellOff, Info, XCircle, Loader2 } from 'lucide-react';
+import { ensurePushSubscription, areAlertsDisabled, setAlertsDisabled, hasPushSubscription, disablePushSubscription, ALERTS_PREF_EVENT } from '../utils/push';
+
+const PUSH_FAIL_MESSAGE: Record<string, string> = {
+  unsupported: 'Este navegador não suporta push (falta Service Worker/PushManager).',
+  'no-token': 'Sessão expirada — faça login de novo.',
+  'no-vapid': 'Servidor sem chave VAPID configurada — o push real está desligado neste ambiente.',
+  'server-rejected': 'O servidor recusou a inscrição de push.',
+  'subscribe-failed': 'Falha ao inscrever este navegador pro push.',
+};
 
 interface NotificationsViewProps {
   items: RecolhimentoItem[];
@@ -58,6 +66,64 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ items, goa
   // o mesmo usado pros alertas automáticos de prazo — não um Notification()
   // local, que só prova que o navegador aceita notificações, não que o
   // sistema de alertas em si funciona.
+  // Liga/desliga os alertas de prazo NESTE navegador. Ligado = inscrição de
+  // push ativa (chega até com o sistema fechado); desligado = inscrição
+  // cancelada aqui e no servidor, sem alerta local nem botão flutuante.
+  const [alertsEnabled, setAlertsEnabled] = useState(false);
+  const [alertsBusy, setAlertsBusy] = useState(false);
+
+  useEffect(() => {
+    const refresh = async () => {
+      const granted = 'Notification' in window && Notification.permission === 'granted';
+      setAlertsEnabled(!areAlertsDisabled() && granted && (await hasPushSubscription()));
+    };
+    refresh();
+    window.addEventListener(ALERTS_PREF_EVENT, refresh);
+    return () => window.removeEventListener(ALERTS_PREF_EVENT, refresh);
+  }, []);
+
+  const toggleAlerts = async () => {
+    setPushStatus(null);
+    setAlertsBusy(true);
+    try {
+      if (alertsEnabled) {
+        await disablePushSubscription(sessionToken);
+        setAlertsDisabled(true);
+        setAlertsEnabled(false);
+        setPushStatus({ type: 'success', message: 'Alertas de prazo desligados neste navegador. Você pode religar quando quiser.' });
+        return;
+      }
+
+      if (!('Notification' in window)) {
+        setPushStatus({ type: 'error', message: 'Seu navegador não suporta notificações.' });
+        return;
+      }
+      if (Notification.permission === 'denied') {
+        setPushStatus({
+          type: 'error',
+          message: 'Permissão de notificação bloqueada para este site. Libere clicando no cadeado ao lado do endereço > Notificações > Permitir.',
+        });
+        return;
+      }
+      if (Notification.permission === 'default' && (await Notification.requestPermission()) !== 'granted') {
+        setPushStatus({ type: 'error', message: 'A permissão para notificações foi negada ou fechada.' });
+        return;
+      }
+
+      const subscribed = await ensurePushSubscription(sessionToken);
+      if (subscribed.ok === false) {
+        const base = PUSH_FAIL_MESSAGE[subscribed.reason] || `Falha desconhecida (${subscribed.reason}).`;
+        setPushStatus({ type: 'error', message: subscribed.details ? `${base} (${subscribed.details})` : base });
+        return;
+      }
+      setAlertsDisabled(false);
+      setAlertsEnabled(true);
+      setPushStatus({ type: 'success', message: 'Alertas de prazo ligados — chegam mesmo com o sistema fechado.' });
+    } finally {
+      setAlertsBusy(false);
+    }
+  };
+
   const testRealPush = async () => {
     setPushStatus(null);
 
@@ -93,14 +159,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ items, goa
     try {
       const subscribed = await ensurePushSubscription(sessionToken);
       if (subscribed.ok === false) {
-        const reasonMessage: Record<string, string> = {
-          unsupported: 'Este navegador não suporta push (falta Service Worker/PushManager).',
-          'no-token': 'Sessão expirada — faça login de novo pra testar o push.',
-          'no-vapid': 'Servidor sem chave VAPID configurada — o push real está desligado neste ambiente.',
-          'server-rejected': 'O servidor recusou a inscrição de push.',
-          'subscribe-failed': 'Falha ao inscrever este navegador pro push.',
-        };
-        const base = reasonMessage[subscribed.reason] || `Falha desconhecida (${subscribed.reason}).`;
+        const base = PUSH_FAIL_MESSAGE[subscribed.reason] || `Falha desconhecida (${subscribed.reason}).`;
         // Mostra o motivo real (mensagem da exceção do navegador) na tela em
         // vez de mandar abrir o console — "veja o console" não ajuda quando
         // não tem DevTools aberto, ou no celular, onde não dá pra abrir.
@@ -145,14 +204,48 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ items, goa
             </div>
           </div>
 
+          <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={alertsEnabled}
+            onClick={toggleAlerts}
+            disabled={alertsBusy}
+            title={alertsEnabled ? 'Desligar alertas de prazo neste navegador' : 'Ligar alertas de prazo neste navegador'}
+            className="flex items-center gap-2.5 pl-3 pr-2 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg border border-white/10 transition-all disabled:opacity-60"
+          >
+            {alertsBusy ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : alertsEnabled ? (
+              <BellRing className="w-3.5 h-3.5" />
+            ) : (
+              <BellOff className="w-3.5 h-3.5 text-blue-200" />
+            )}
+            <span className="text-[10px] font-black uppercase tracking-widest">
+              Alertas {alertsEnabled ? 'ligados' : 'desligados'}
+            </span>
+            <span
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                alertsEnabled ? 'bg-emerald-500' : 'bg-white/20'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                  alertsEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'
+                }`}
+              />
+            </span>
+          </button>
           <button
             onClick={testRealPush}
-            disabled={pushBusy}
+            disabled={pushBusy || !alertsEnabled}
+            title={alertsEnabled ? undefined : 'Ligue os alertas pra testar'}
             className="flex items-center space-x-2 px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border border-white/10 shrink-0 disabled:opacity-60"
           >
             {pushBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BellRing className="w-3.5 h-3.5" />}
             <span>{pushBusy ? 'Enviando...' : 'Testar Notificação Push'}</span>
           </button>
+          </div>
         </div>
       </div>
 

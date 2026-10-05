@@ -11,3 +11,6 @@ coverage/
 *.xlsx
 *.xls
 !public/**/*.xlsx
+
+# Skills do Claude Code copiadas de ~/.gemini/skills — ficam só nesta máquina.
+.claude/skills/

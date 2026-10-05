@@ -78,3 +78,55 @@ export async function ensurePushSubscription(sessionToken: string | null): Promi
     return { ok: false, reason: 'subscribe-failed', details: err?.message };
   }
 }
+
+// Preferência por navegador de receber alertas de prazo. Desligado = sem
+// push (inscrição cancelada aqui e no servidor), sem alerta local com a aba
+// aberta e sem o botão flutuante pedindo pra ativar. Evento avisa os outros
+// componentes montados (botão flutuante x Central de Alertas) na hora.
+const ALERTS_DISABLED_KEY = 'munago_alerts_disabled';
+export const ALERTS_PREF_EVENT = 'munago-alerts-pref';
+
+export function areAlertsDisabled(): boolean {
+  try {
+    return localStorage.getItem(ALERTS_DISABLED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setAlertsDisabled(disabled: boolean) {
+  try {
+    if (disabled) localStorage.setItem(ALERTS_DISABLED_KEY, 'true');
+    else localStorage.removeItem(ALERTS_DISABLED_KEY);
+  } catch {
+    // storage bloqueado — vale só pra esta sessão via evento
+  }
+  window.dispatchEvent(new CustomEvent(ALERTS_PREF_EVENT, { detail: { disabled } }));
+}
+
+export async function hasPushSubscription(): Promise<boolean> {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    return !!(await reg?.pushManager.getSubscription());
+  } catch {
+    return false;
+  }
+}
+
+// Cancela a inscrição de push deste navegador e remove do servidor — sem
+// isso o servidor continuaria mandando alertas pro endpoint antigo.
+export async function disablePushSubscription(sessionToken: string | null): Promise<void> {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  const reg = await navigator.serviceWorker.getRegistration();
+  const subscription = await reg?.pushManager.getSubscription();
+  if (!subscription) return;
+  if (sessionToken) {
+    await fetch('/api/push/unsubscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionToken}` },
+      body: JSON.stringify({ endpoint: subscription.endpoint }),
+    }).catch(() => {});
+  }
+  await subscription.unsubscribe().catch(() => {});
+}

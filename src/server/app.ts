@@ -942,7 +942,9 @@ export async function createApp() {
   app.post('/api/push/unsubscribe', requireDb, requireAuth, async (req, res) => {
     try {
       const { endpoint } = req.body || {};
-      if (endpoint) await pool!.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [endpoint]);
+      // Só a assinatura do próprio usuário — sem o user_id, qualquer sessão
+      // válida conseguia apagar a assinatura de outra pessoa pelo endpoint.
+      if (endpoint) await pool!.query('DELETE FROM push_subscriptions WHERE endpoint = $1 AND user_id = $2', [endpoint, (req as any).authUser.id]);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao remover assinatura de push.', details: err.message });

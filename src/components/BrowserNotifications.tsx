@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { RecolhimentoItem } from '../types';
 import { Bell, BellOff, Loader2 } from 'lucide-react';
-import { ensurePushSubscription, EnsurePushSubscriptionResult } from '../utils/push';
+import { ensurePushSubscription, EnsurePushSubscriptionResult, areAlertsDisabled, hasPushSubscription, ALERTS_PREF_EVENT } from '../utils/push';
 
 interface BrowserNotificationsProps {
   items: RecolhimentoItem[];
@@ -25,6 +25,22 @@ export const BrowserNotifications: React.FC<BrowserNotificationsProps> = ({ item
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failReason, setFailReason] = useState<string | null>(null);
+  // Desligado na Central de Alertas — some tudo: botão, push e alerta local.
+  const [alertsDisabled, setAlertsDisabledState] = useState(areAlertsDisabled);
+
+  useEffect(() => {
+    const onPref = (e: Event) => {
+      const disabled = Boolean((e as CustomEvent).detail?.disabled);
+      setAlertsDisabledState(disabled);
+      if (disabled) setPushSubscribed(false);
+      else {
+        if ('Notification' in window) setPermission(Notification.permission);
+        hasPushSubscription().then(setPushSubscribed);
+      }
+    };
+    window.addEventListener(ALERTS_PREF_EVENT, onPref);
+    return () => window.removeEventListener(ALERTS_PREF_EVENT, onPref);
+  }, []);
 
   // Se já tem inscrição de push ativa neste navegador (de uma sessão anterior),
   // não mostra o botão de novo — o alerta já funciona mesmo com tudo fechado.
@@ -91,7 +107,7 @@ export const BrowserNotifications: React.FC<BrowserNotificationsProps> = ({ item
   // sozinho assim que um login de verdade traz um token — sem precisar
   // clicar em nada de novo.
   useEffect(() => {
-    if (permission === 'granted' && !pushSubscribed && sessionToken) {
+    if (permission === 'granted' && !pushSubscribed && sessionToken && !areAlertsDisabled()) {
       retryEnablePush();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -101,7 +117,7 @@ export const BrowserNotifications: React.FC<BrowserNotificationsProps> = ({ item
   // configurado, ou navegador sem suporte): checa prazos com a aba aberta,
   // igual antes. Some sozinho assim que o push de verdade estiver ativo.
   useEffect(() => {
-    if (permission !== 'granted' || pushSubscribed) return;
+    if (permission !== 'granted' || pushSubscribed || alertsDisabled) return;
 
     const now = new Date();
     const pendingItems = items.filter((item) => item.status === 'Aguardando pagamento');
@@ -132,9 +148,10 @@ export const BrowserNotifications: React.FC<BrowserNotificationsProps> = ({ item
         }
       }
     });
-  }, [items, permission, pushSubscribed]);
+  }, [items, permission, pushSubscribed, alertsDisabled]);
 
   if (typeof window === 'undefined' || !('Notification' in window)) return null;
+  if (alertsDisabled) return null;
   if (permission === 'granted' && pushSubscribed) return null; // já ativo, não precisa mostrar nada
 
   // Permissão já concedida mas o push de verdade não ficou disponível (sem
