@@ -1170,9 +1170,10 @@ export async function createApp() {
 
   // ASAAS Bank API Proxy Endpoints
   
+  // Só aceita unidadeId — chave crua vinda do body deixava qualquer usuário
+  // logado usar o servidor como proxy da API ASAAS com uma chave qualquer.
   async function getAsaasToken(req: express.Request): Promise<string | null> {
-    const { apiKey, unidadeId } = req.body || {};
-    if (apiKey) return apiKey;
+    const { unidadeId } = req.body || {};
     if (unidadeId && pool) {
       const result = await pool.query('SELECT asaas_api_key FROM unidades WHERE id = $1', [unidadeId]);
       return result.rows[0]?.asaas_api_key || null;
